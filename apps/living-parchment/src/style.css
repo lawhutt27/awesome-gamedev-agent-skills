@@ -1,0 +1,176 @@
+:root {
+  --ink: #1d1712;
+  --paper: #f1e4c6;
+  --seal: #b8342a;
+  --seal-dark: #7d1f18;
+  --table: #2a211a;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Mobile lock: no browser pan, zoom, bounce, pull-to-refresh, selection or callouts. */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+  background: var(--table);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  outline: none;
+  cursor: crosshair;
+}
+
+.hint {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+  width: min(92vw, 640px);
+  padding: 8px 14px;
+  color: var(--paper);
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  transition: opacity 1.2s ease;
+}
+.hint b {
+  color: #f6c98a;
+  font-weight: 600;
+}
+.hint.faded {
+  opacity: 0;
+}
+
+.toolbar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(14px + var(--safe-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 8px 14px;
+  border-radius: 40px;
+  background: rgba(30, 23, 18, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+.biomes,
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Circular ink-stamp (hanko) buttons. */
+.stamp {
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 600 20px/1 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif CJK JP', serif;
+  color: var(--paper);
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.18), transparent 55%),
+    var(--seal);
+  box-shadow:
+    inset 0 0 0 2px rgba(243, 230, 200, 0.75),
+    inset 0 0 0 4px var(--seal),
+    inset 0 0 8px 4px rgba(60, 10, 5, 0.45),
+    0 2px 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    transform 0.18s cubic-bezier(0.3, 1.6, 0.5, 1),
+    filter 0.2s,
+    opacity 0.2s;
+}
+.stamp:active {
+  transform: scale(0.88) rotate(-4deg);
+}
+.stamp:focus-visible {
+  outline: 2px solid #f6c98a;
+  outline-offset: 3px;
+}
+.stamp.biome {
+  filter: saturate(0.35) brightness(0.8);
+}
+.stamp.biome[aria-checked='true'] {
+  filter: none;
+  transform: scale(1.1);
+}
+.stamp.tool {
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.25), transparent 55%),
+    #3b3029;
+  box-shadow:
+    inset 0 0 0 2px rgba(243, 230, 200, 0.55),
+    0 2px 4px rgba(0, 0, 0, 0.4);
+}
+.stamp.tool svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: var(--paper);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.stamp:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.biome-name {
+  position: fixed;
+  left: 50%;
+  bottom: calc(80px + var(--safe-bottom));
+  transform: translateX(-50%);
+  color: var(--paper);
+  font-size: 15px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+}
+.biome-name.show {
+  opacity: 1;
+}
+
+@media (max-width: 380px) {
+  .stamp {
+    width: 40px;
+    height: 40px;
+    font-size: 17px;
+  }
+  .toolbar {
+    gap: 12px;
+  }
+}
