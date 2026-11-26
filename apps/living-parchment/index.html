@@ -20,25 +20,79 @@
       <span>Draw a <b>loop</b> to raise a hill</span>
       <span>Sharp corners build a <b>ruin</b></span>
       <span>An open line carves a <b>river</b></span>
-      <span><b>Tap</b> to plant · two fingers to turn the page</span>
+      <span><b>Tap</b> to plant · pinch to walk in</span>
     </div>
+
+    <nav id="sidebar" class="sidebar" aria-label="View and world">
+      <button class="chip" id="help" title="How to play (H)" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17.2v.1" /></svg>
+        <span>Help</span>
+      </button>
+      <button class="chip" id="fold" title="Walk on the page (V)" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2" /><path d="M12 8v6m0 0-3 6m3-6 3 6M8 11h8" /></svg>
+        <span id="fold-label">Walk</span>
+      </button>
+      <button class="chip" id="share" title="Save this world to a link">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></svg>
+        <span>Share</span>
+      </button>
+      <button class="chip" id="export" title="Download as a .glb 3D model">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3" /></svg>
+        <span>.glb</span>
+      </button>
+    </nav>
 
     <nav id="toolbar" class="toolbar" aria-label="Tools">
       <div class="biomes" role="radiogroup" aria-label="Biome">
-        <button class="stamp biome" data-biome="mossyRuin" role="radio" aria-checked="true" title="Mossy Ruin (1)">苔</button>
-        <button class="stamp biome" data-biome="autumnRidge" role="radio" aria-checked="false" title="Autumn Ridge (2)">秋</button>
-        <button class="stamp biome" data-biome="moonlitTide" role="radio" aria-checked="false" title="Moonlit Tide (3)">月</button>
+        <button class="stamp biome" data-biome="mossyRuin" role="radio" aria-checked="true" title="Mossy Ruin (1)">Moss</button>
+        <button class="stamp biome" data-biome="autumnRidge" role="radio" aria-checked="false" title="Autumn Ridge (2)">Autumn</button>
+        <button class="stamp biome" data-biome="moonlitTide" role="radio" aria-checked="false" title="Moonlit Tide (3)">Moon</button>
       </div>
       <div class="actions">
-        <button class="stamp tool" id="undo" title="Undo stroke (Ctrl+Z)" aria-label="Undo stroke" disabled>
+        <button class="stamp tool" id="undo" title="Undo stroke (Ctrl+Z)" disabled>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7H4V2M4.6 7.2A8 8 0 1 1 4 13" /></svg>
+          <span>Undo</span>
         </button>
-        <button class="stamp tool" id="clear" title="Clear page" aria-label="Clear page">
+        <button class="stamp tool" id="clear" title="Clear page">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M9 6V4h6v2M7 6l1 14h8l1-14" /></svg>
+          <span>Clear</span>
         </button>
       </div>
     </nav>
     <div id="biome-name" class="biome-name" aria-live="polite"></div>
+
+    <div id="stick" class="stick" aria-label="Walk" role="application">
+      <div class="knob"></div>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <div id="help-panel" class="help" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
+      <div class="help-card">
+        <h2 id="help-title">How to play</h2>
+        <p class="lede">Draw with ink on the page and the paper rises into a little world.</p>
+        <dl>
+          <dt>Draw a closed loop</dt>
+          <dd>Raises a terraced hill. Loop again inside a hill to stack a higher terrace.</dd>
+          <dt>Loop with sharp corners</dt>
+          <dd>A square or triangle builds a stone ruin on a flat plateau.</dd>
+          <dt>Draw an open line</dt>
+          <dd>Carves a river. The water flows the way you drew it.</dd>
+          <dt>Tap, or a short flick</dt>
+          <dd>Plants trees, reeds, standing stones or lanterns. What grows depends on the biome and the ground.</dd>
+          <dt>Two fingers</dt>
+          <dd>Twist to turn the page, slide up or down to tilt. Pinch in for a flat map; pinch out to walk on the page.</dd>
+          <dt>Walking</dt>
+          <dd>Use the thumbstick (or W A S D) to walk and drag to look around. Tap still plants. Press <b>Map</b> or pinch in to fly back up.</dd>
+          <dt>Biomes</dt>
+          <dd><b>Moss</b> (Mossy Ruin), <b>Autumn</b> (Autumn Ridge) and <b>Moon</b> (Moonlit Tide) change the light, the water and the paper cutouts.</dd>
+          <dt>Undo, Clear, Share, .glb</dt>
+          <dd>Undo steps back up to 10 strokes. Share saves the whole world into a link. .glb downloads a 3D model for other three.js projects.</dd>
+        </dl>
+        <p class="keys">Desktop: right-drag to turn, wheel to fold in and out, Ctrl+Z undo, 1 2 3 biomes, V walk, H help.</p>
+        <button class="close" id="help-close">Start drawing</button>
+      </div>
+    </div>
 
     <script type="module" src="/src/main.js"></script>
   </body>

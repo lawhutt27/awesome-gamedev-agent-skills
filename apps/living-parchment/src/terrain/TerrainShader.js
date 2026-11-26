@@ -69,7 +69,46 @@ export function createSharedUniforms({ heightFrom, heightTo, noise, albedo, flow
     uContour: { value: new THREE.Color('#3a3424') },
     uSky: { value: new THREE.Color('#e8efd8') },
     uGrain: { value: 0.22 },
+    uCliffInk: { value: null },
   };
+}
+
+/** Hand-drawn strata lines and hatching for steep faces. 1 = paper, 0 = ink. Tiles. */
+export function createCliffInkTexture(noise2D, size = 256) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff';
+  g.fillRect(0, 0, size, size);
+  g.lineCap = 'round';
+  // Wavy strata (horizontal in world Y), drawn to wrap across the tile seam.
+  for (let i = 0; i < 9; i++) {
+    const y0 = (i + 0.5) * (size / 9);
+    g.strokeStyle = `rgba(0,0,0,${0.55 + 0.35 * ((i * 7) % 3) / 2})`;
+    g.lineWidth = 1.2 + ((i * 5) % 3) * 0.6;
+    g.beginPath();
+    for (let x = -4; x <= size + 4; x += 4) {
+      const t = (x / size) * Math.PI * 2;
+      const y = y0 + Math.sin(t * 2 + i) * 3 + noise2D(Math.cos(t) * 1.5 + i, Math.sin(t) * 1.5) * 2.5;
+      if (x === -4) g.moveTo(x, y);
+      else g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  // Short downward hatching between strata, denser on alternate bands.
+  for (let k = 0; k < 340; k++) {
+    const x = ((k * 97.13) % size) + noise2D(k, 3) * 3;
+    const band = k % 9;
+    const y = (band + 0.55) * (size / 9) + noise2D(k, 7) * 4;
+    const len = 5 + ((k * 13) % 7);
+    g.strokeStyle = `rgba(0,0,0,${band % 2 ? 0.45 : 0.25})`;
+    g.lineWidth = 0.9;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x - 2, y + len);
+    g.stroke();
+  }
+  return c;
 }
 
 function inject(shader, uniforms) {
@@ -92,7 +131,9 @@ export function createTerrainMaterial(uniforms) {
         `#include <common>
 ${HEIGHT_GLSL}
 varying float vH;
-varying vec2 vTUv;`,
+varying vec2 vTUv;
+varying vec3 vWN;
+varying vec3 vWP;`,
       )
       .replace(
         '#include <beginnormal_vertex>',
@@ -103,6 +144,7 @@ float lpR = lpWorldY(uv + vec2(lpE, 0.0));
 float lpD = lpWorldY(uv - vec2(0.0, lpE));
 float lpU = lpWorldY(uv + vec2(0.0, lpE));
 vec3 objectNormal = normalize(vec3(lpL - lpR, 2.0 * lpWs, lpU - lpD));
+vWN = objectNormal;
 #ifdef USE_TANGENT
   vec3 objectTangent = vec3(tangent.xyz);
 #endif`,
@@ -112,7 +154,8 @@ vec3 objectNormal = normalize(vec3(lpL - lpR, 2.0 * lpWs, lpU - lpD));
         `vec3 transformed = vec3(position);
 transformed.y = lpWorldY(uv);
 vH = lpRawH(uv);
-vTUv = uv;`,
+vTUv = uv;
+vWP = transformed;`,
       );
 
     shader.fragmentShader = shader.fragmentShader
@@ -131,8 +174,11 @@ uniform vec3 uWaterGlint;
 uniform vec3 uContour;
 uniform vec3 uSky;
 uniform float uGrain;
+uniform sampler2D uCliffInk;
 varying float vH;
 varying vec2 vTUv;
+varying vec3 vWN;
+varying vec3 vWP;
 float lpWater;
 float lpBands;`,
       )
@@ -156,6 +202,23 @@ float lpBands;`,
   float major = 1.0 - clamp(abs(fract(majorC) - 0.5) / majorFw - 0.6, 0.0, 1.0);
   float aboveSea = smoothstep(0.515, 0.545, h);
   diffuseColor.rgb = mix(diffuseColor.rgb, uContour, clamp(line * 0.3 + major * 0.45, 0.0, 0.7) * aboveSea);
+
+  // Projected cliff ink: the page is painted from above, so steep terrace and ruin walls
+  // would smear it. Side-project hand-drawn strata and hatching onto them instead
+  // (triplanar on X/Z, in world space, so nothing stretches with the slope).
+  vec3 wn = normalize(vWN);
+  float steep = smoothstep(0.86, 0.5, wn.y) * smoothstep(0.43, 0.47, h);
+  if (steep > 0.0) {
+    vec3 an = abs(wn);
+    float bx = an.x / (an.x + an.z + 1e-4);
+    vec2 sideScale = vec2(0.9, 3.2);
+    float inkX = texture2D(uCliffInk, vWP.zy * sideScale).r;
+    float inkZ = texture2D(uCliffInk, vWP.xy * sideScale).r;
+    float ink = mix(inkZ, inkX, bx);
+    vec3 cliff = diffuseColor.rgb * mix(vec3(0.62, 0.55, 0.45), vec3(1.0), 0.55);
+    cliff = mix(uContour, cliff, ink);
+    diffuseColor.rgb = mix(diffuseColor.rgb, cliff, steep);
+  }
 
   // Animated ink-wash water wherever the channel drops below the water table.
   lpWater = 1.0 - smoothstep(0.405, 0.425, h);

@@ -86,14 +86,17 @@ body {
 
 /* Circular ink-stamp (hanko) buttons. */
 .stamp {
-  width: 46px;
-  height: 46px;
+  width: 52px;
+  height: 52px;
   padding: 0;
   border: none;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font: 600 20px/1 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif CJK JP', serif;
+  align-content: center;
+  gap: 1px;
+  font: 600 11.5px/1 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  letter-spacing: 0.02em;
   color: var(--paper);
   background:
     radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.18), transparent 55%),
@@ -132,9 +135,13 @@ body {
     inset 0 0 0 2px rgba(243, 230, 200, 0.55),
     0 2px 4px rgba(0, 0, 0, 0.4);
 }
+.stamp.tool span {
+  font-size: 10px;
+  font-weight: 500;
+}
 .stamp.tool svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   fill: none;
   stroke: var(--paper);
   stroke-width: 2;
@@ -164,13 +171,216 @@ body {
   opacity: 1;
 }
 
-@media (max-width: 380px) {
+@media (max-width: 400px) {
   .stamp {
-    width: 40px;
-    height: 40px;
-    font-size: 17px;
+    width: 46px;
+    height: 46px;
+    font-size: 10.5px;
   }
   .toolbar {
-    gap: 12px;
+    gap: 10px;
+    padding: 7px 10px;
+  }
+  .biomes,
+  .actions {
+    gap: 7px;
+  }
+}
+
+/* Right-hand column: help, walk/map, share, export. */
+.sidebar {
+  position: fixed;
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  top: calc(84px + env(safe-area-inset-top, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 44px;
+  height: 40px;
+  padding: 0 12px 0 10px;
+  border: none;
+  border-radius: 22px;
+  color: var(--paper);
+  background: rgba(30, 23, 18, 0.62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow:
+    inset 0 0 0 1.5px rgba(243, 230, 200, 0.4),
+    0 3px 10px rgba(0, 0, 0, 0.3);
+  font: 500 13px/1 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.15s, background 0.2s;
+}
+.chip:active {
+  transform: scale(0.94);
+}
+.chip:focus-visible {
+  outline: 2px solid #f6c98a;
+  outline-offset: 2px;
+}
+.chip svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+.chip[aria-pressed='true'] {
+  background: var(--seal);
+}
+
+/* Virtual thumbstick (ground level only). */
+.stick {
+  position: fixed;
+  left: calc(22px + env(safe-area-inset-left, 0px));
+  bottom: calc(96px + var(--safe-bottom));
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(243, 230, 200, 0.1), rgba(243, 230, 200, 0.22));
+  box-shadow: inset 0 0 0 2px rgba(243, 230, 200, 0.45);
+  touch-action: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.stick.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+.stick .knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 35% 30%, #d45a4a, var(--seal) 60%, var(--seal-dark));
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(150px + var(--safe-bottom));
+  transform: translate(-50%, 10px);
+  max-width: min(90vw, 420px);
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgba(30, 23, 18, 0.88);
+  color: var(--paper);
+  font-size: 14px;
+  line-height: 1.35;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
+}
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* How-to-play panel. */
+.help {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: rgba(15, 11, 8, 0.6);
+  touch-action: pan-y;
+  z-index: 20;
+}
+.help[hidden] {
+  display: none;
+}
+.help-card {
+  width: min(100%, 520px);
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  box-sizing: border-box;
+  padding: 22px 22px 18px;
+  border-radius: 6px;
+  color: var(--ink);
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(255, 252, 240, 0.7), transparent 60%),
+    radial-gradient(ellipse at 80% 90%, rgba(160, 110, 60, 0.18), transparent 55%),
+    var(--paper);
+  box-shadow:
+    inset 0 0 0 1px rgba(110, 70, 40, 0.35),
+    inset 0 0 40px rgba(130, 85, 40, 0.25),
+    0 18px 50px rgba(0, 0, 0, 0.55);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.help h2 {
+  margin: 0 0 4px;
+  font-size: 24px;
+  font-weight: 600;
+  text-wrap: balance;
+}
+.help .lede {
+  margin: 0 0 14px;
+  color: #5a4632;
+}
+.help dl {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+.help dt {
+  font-weight: 700;
+  color: var(--seal-dark);
+}
+.help dd {
+  margin: 2px 0 0;
+  line-height: 1.4;
+}
+.help .keys {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: #5a4632;
+}
+.help .close {
+  margin-top: 16px;
+  width: 100%;
+  height: 44px;
+  border: none;
+  border-radius: 22px;
+  background: var(--seal);
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.help .close:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp,
+  .chip,
+  .toast,
+  .hint,
+  .biome-name {
+    transition: none;
   }
 }

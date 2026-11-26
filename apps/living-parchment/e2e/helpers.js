@@ -26,6 +26,9 @@ export async function launch() {
  * setPointerCapture throws for synthetic pointer ids, so the test page makes it lenient.
  */
 const INIT = () => {
+  try {
+    localStorage.setItem('living-parchment-seen-help', '1'); // skip the first-visit help panel
+  } catch {}
   for (const name of ['setPointerCapture', 'releasePointerCapture']) {
     const orig = Element.prototype[name];
     Element.prototype[name] = function lenient(id) {
@@ -38,8 +41,8 @@ const INIT = () => {
   }
 };
 
-export async function openApp(browser, url, { viewport = { width: 720, height: 540 }, ...ctxOpts } = {}) {
-  const context = await browser.newContext({ viewport, ...ctxOpts });
+export async function openApp(browser, url, { viewport = { width: 720, height: 540 }, hash = '', context: existing, ...ctxOpts } = {}) {
+  const context = existing ?? (await browser.newContext({ viewport, acceptDownloads: true, ...ctxOpts }));
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
@@ -50,7 +53,7 @@ export async function openApp(browser, url, { viewport = { width: 720, height: 5
     errors.push(`console: ${t}`);
   });
   await page.addInitScript(INIT);
-  await page.goto(`${url}?quality=low`);
+  await page.goto(`${url}?quality=low${hash}`);
   await page.waitForFunction(() => window.renderer?.info.render.frame > 1, null, { timeout: 60000 });
   return { context, page, errors };
 }

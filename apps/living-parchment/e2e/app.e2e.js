@@ -259,14 +259,14 @@ describe('desktop', () => {
     assert.notEqual(g1.pitch, g0.pitch);
     await page.mouse.move(360, 270);
     await page.mouse.wheel(0, 400);
-    await page.waitForFunction((d) => window.__lp.rig.goal.distance > d, g1.distance);
+    await page.waitForFunction((f) => window.__lp.rig.goal.fold < f, g1.fold);
     assert.equal((await state(page)).history.length, h0);
     await page.waitForTimeout(800);
     await page.screenshot({ path: path.join(SHOTS, 'desktop-3-orbit.png') });
   });
 
   test('strokes that start off the page do nothing', async () => {
-    await page.evaluate(() => Object.assign(window.__lp.rig.goal, { yaw: 0, pitch: 1.05, distance: 15.5 }));
+    await page.evaluate(() => Object.assign(window.__lp.rig.goal, { yaw: 0, pitch: 1.05, fold: 0.4 }));
     await page.waitForTimeout(800);
     const h0 = (await state(page)).history.length;
     await stroke(page, [
@@ -357,7 +357,7 @@ describe('mobile (touch)', () => {
   test('two-finger pinch zooms and cancels the stroke in progress', async () => {
     const cdp = await context.newCDPSession(page);
     const h0 = (await state(page)).history.length;
-    const d0 = await page.evaluate(() => window.__lp.rig.goal.distance);
+    const d0 = await page.evaluate(() => window.__lp.rig.goal.fold);
     const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points });
     const c = { x: 195, y: 420 };
     await touch('touchStart', [{ x: c.x, y: c.y - 30, id: 1 }]);
@@ -373,8 +373,8 @@ describe('mobile (touch)', () => {
       ]);
     }
     await touch('touchEnd', []);
-    const d1 = await page.evaluate(() => window.__lp.rig.goal.distance);
-    assert.ok(d1 < d0, `pinch out zooms in (${d0} -> ${d1})`);
+    const d1 = await page.evaluate(() => window.__lp.rig.goal.fold);
+    assert.ok(d1 > d0, `pinch out folds toward ground level (${d0} -> ${d1})`);
     const s = await state(page);
     assert.equal(s.history.length, h0, 'no stroke committed');
     assert.equal(await page.evaluate(() => window.__lp.parchment.pending), null);
