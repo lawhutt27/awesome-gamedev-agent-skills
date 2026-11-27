@@ -17,7 +17,7 @@ export const DEFAULTS = {
   closeRel: 0.3, // ...and below this fraction of the stroke's bounding-box size
   minArea: 0.0015, // uv^2: loops must enclose something
   cornerAngle: 48, // degrees: a turn sharper than this counts as a corner
-  ruinCorners: 3, // corners needed for an angular (ruin) loop
+  mountainCorners: 3, // corners needed for an angular (mountain) loop
 };
 
 // ---------------------------------------------------------------- basic geometry
@@ -320,7 +320,7 @@ export function recognizeDollarOne(pts) {
 /**
  * Classify a finished stroke.
  * @param {{points:{x,y}[], screen:{x,y}[], duration:number}} stroke  points in UV, screen in px
- * @returns {{kind:'tap'|'flick'|'loop'|'ruin'|'river', points, polygon?, corners?, recognized?, length}}
+ * @returns {{kind:'tap'|'flick'|'loop'|'mountain'|'river', points, polygon?, corners?, recognized?, length}}
  */
 export function classifyStroke(stroke, opts = {}) {
   const o = { ...DEFAULTS, ...opts };
@@ -344,15 +344,15 @@ export function classifyStroke(stroke, opts = {}) {
   if (closed) {
     const { corners, points } = findCorners(ring, { closed: true, angle: o.cornerAngle });
     const recognized = recognizeDollarOne(ring);
-    let angular = corners.length >= o.ruinCorners;
+    let angular = corners.length >= o.mountainCorners;
     // Borderline: two crisp corners but the shape clearly matches a polygon template.
     if (!angular && corners.length === 2 && recognized.angular && recognized.score > 0.82) angular = true;
-    // A very clean circle never becomes a ruin, even if jitter produced corners.
+    // A very clean circle never becomes a mountain, even if jitter produced corners.
     if (angular && recognized.name === 'circle' && recognized.score > 0.93 && corners.length < 4) angular = false;
     const polygon = angular ? corners.map((i) => points[i]) : null;
     return {
       ...base,
-      kind: angular ? 'ruin' : 'loop',
+      kind: angular ? 'mountain' : 'loop',
       points: ring,
       polygon,
       corners: corners.length,

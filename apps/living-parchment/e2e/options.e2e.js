@@ -67,12 +67,12 @@ describe('tools', () => {
     assert.ok((await sample(page, 0.8, 0.3, 2)) > 0.5, 'water along the ring');
   });
 
-  test('Ruin builds a ruin from a smooth loop', async () => {
-    await tool(page, 'ruin');
+  test('Mountain raises a rocky mountain from a smooth loop', async () => {
+    await tool(page, 'mountain');
     await drawUv(page, circleUv(0.3, 0.75, 0.08));
     await settle(page);
-    assert.equal(await lastKind(page), 'ruin');
-    assert.ok((await sample(page, 0.3, 0.75, 1)) > 0.5, 'stone inside');
+    assert.equal(await lastKind(page), 'mountain');
+    assert.ok((await sample(page, 0.3, 0.75, 1)) > 0.5, 'rock inside');
   });
 
   test('Plant drags a row, and "What to plant" picks the sprite', async () => {

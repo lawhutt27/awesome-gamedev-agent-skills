@@ -12,14 +12,14 @@ export const LANTERN = 3;
 export const BIOMES = {
   mossyRuin: {
     id: 'mossyRuin',
-    name: 'Mossy Ruin',
+    name: 'Mossy Vale',
     row: 0,
     ink: '#1b1a16',
     inkWet: 'rgba(27, 26, 22, 0.85)',
     hillWash: '#7f9a55',
     hillEdge: '#4f6b33',
-    ruinStone: '#8d8a7c',
-    ruinMoss: '#5f7a3c',
+    rock: '#8d8a7c',
+    snow: '#f6f3ea',
     bankWash: '#6b8f8a',
     waterInk: '#2f5d66',
     waterDeep: '#173a45',
@@ -36,7 +36,7 @@ export const BIOMES = {
     weights: {
       flat: [5, 2, 2, 1],
       hill: [7, 0, 2, 1],
-      ruin: [1, 0, 5, 4],
+      rock: [3, 0, 6, 1],
       water: [0, 9, 1, 0],
     },
     sprites: {
@@ -59,8 +59,8 @@ export const BIOMES = {
     inkWet: 'rgba(42, 22, 14, 0.85)',
     hillWash: '#c98a3e',
     hillEdge: '#9a4d22',
-    ruinStone: '#9b8670',
-    ruinMoss: '#a0642e',
+    rock: '#9b8670',
+    snow: '#f7efe1',
     bankWash: '#8aa3a0',
     waterInk: '#3c6470',
     waterDeep: '#1f3b46',
@@ -76,7 +76,7 @@ export const BIOMES = {
     weights: {
       flat: [6, 2, 1, 1],
       hill: [8, 0, 1, 1],
-      ruin: [2, 0, 4, 4],
+      rock: [4, 0, 5, 1],
       water: [0, 9, 1, 0],
     },
     sprites: {
@@ -99,8 +99,8 @@ export const BIOMES = {
     inkWet: 'rgba(15, 22, 38, 0.85)',
     hillWash: '#5f7d8f',
     hillEdge: '#34506a',
-    ruinStone: '#7d8696',
-    ruinMoss: '#4f6c7a',
+    rock: '#7d8696',
+    snow: '#e3e9f4',
     bankWash: '#5f86a8',
     waterInk: '#2a4f86',
     waterDeep: '#102a55',
@@ -116,7 +116,7 @@ export const BIOMES = {
     weights: {
       flat: [3, 3, 1, 3],
       hill: [5, 0, 2, 3],
-      ruin: [1, 0, 3, 6],
+      rock: [2, 0, 5, 2],
       water: [0, 8, 0, 2],
     },
     sprites: {
@@ -150,7 +150,7 @@ export function pickWeighted(weights, r) {
 /** Terrain context for flora choice, from height (0..1, 0.5 = paper level) and masks (0..1). */
 export function terrainContext(h, stone, water) {
   if (h < 0.46 || water > 0.35) return 'water'; // channel and its wet banks
-  if (stone > 0.4) return 'ruin';
+  if (stone > 0.4) return 'rock';
   if (h > 0.56) return 'hill';
   return 'flat';
 }

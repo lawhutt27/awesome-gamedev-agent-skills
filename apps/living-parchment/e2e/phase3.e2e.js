@@ -38,7 +38,7 @@ describe('ui', () => {
       [...document.querySelectorAll('#tools button, #toolbar button, #sidebar button')].map((b) => b.textContent.trim()),
     );
     assert.deepEqual(labels, [
-      'Draw', 'Hill', 'Ruin', 'River', 'Plant', 'Erase', 'Move',
+      'Draw', 'Hill', 'Mountain', 'River', 'Plant', 'Erase', 'Move',
       'Help', 'Options', 'Walk', 'Random', 'Photo', 'Share', '.glb',
       'Moss', 'Autumn', 'Moon', 'Undo', 'Redo', 'Clear',
     ]);
@@ -87,7 +87,7 @@ describe('world', () => {
 
   test('every committed stroke is logged for replay', async () => {
     const log = await page.evaluate(() => window.__lp.worldLog.map((e) => e.kind));
-    assert.deepEqual(log, ['loop', 'loop', 'ruin', 'river', 'tap', 'tap', 'tap']);
+    assert.deepEqual(log, ['loop', 'loop', 'mountain', 'river', 'tap', 'tap', 'tap']);
   });
 
   test('ink-edge pass and projected cliff ink are active', async () => {
@@ -203,7 +203,7 @@ describe('world', () => {
       log: await page.evaluate(() => window.__lp.worldLog.length),
       sprites: (await state(page)).sprites,
       hill: await sample(page, 0.35, 0.4),
-      ruin: await sample(page, 0.7, 0.35, 1),
+      rock: await sample(page, 0.7, 0.35, 1),
       water: await sample(page, ...river[20]),
     };
     const other = await openApp(browser, url, { hash });
@@ -212,13 +212,13 @@ describe('world', () => {
       log: await other.page.evaluate(() => window.__lp.worldLog.length),
       sprites: (await state(other.page)).sprites,
       hill: await sample(other.page, 0.35, 0.4),
-      ruin: await sample(other.page, 0.7, 0.35, 1),
+      rock: await sample(other.page, 0.7, 0.35, 1),
       water: await sample(other.page, ...river[20]),
     };
     assert.equal(copy.log, original.log);
     assert.equal(copy.sprites, original.sprites);
     assert.ok(Math.abs(copy.hill - original.hill) < 0.01, `hill ${original.hill} vs ${copy.hill}`);
-    assert.ok(Math.abs(copy.ruin - original.ruin) < 0.01);
+    assert.ok(Math.abs(copy.rock - original.rock) < 0.01);
     assert.ok(Math.abs(copy.water - original.water) < 0.01);
     const same = await other.page.evaluate(
       (pos) => window.__lp.sprites.items.every((it, i) => Math.abs(it.x - pos[i][0]) < 1e-6 && Math.abs(it.z - pos[i][1]) < 1e-6),

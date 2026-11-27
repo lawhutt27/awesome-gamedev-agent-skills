@@ -2,11 +2,11 @@
 //
 // Phase 1: a mobile-locked page whose offscreen canvases displace a 160x160 terrain plane,
 //          with pen-scratch foley while you draw.
-// Phase 2: strokes are classified on release into terraced hills, stone ruins, rivers or
+// Phase 2: strokes are classified on release into terraced hills, rocky mountains, rivers or
 //          planted paper-cutout flora, with three switchable biomes and a 10-step undo.
 // Phase 3: the pinch "Dimensional Fold" from a flat map down to a walkable first-person view,
 //          a screen-space ink-edge pass, projected cliff ink, .glb export and world links.
-// Extras:  a tool rail (force hill / ruin / river / plant, erase, move the camera), an Options
+// Extras:  a tool rail (force hill / mountain / river / plant, erase, move the camera), an Options
 //          panel (brush size, what to plant, camera presets, sun, display switches), redo,
 //          random worlds, photos and a free desktop camera (orbit, tilt, pan, zoom).
 
@@ -603,8 +603,8 @@ function applyEntry(entry, live) {
       }
       return true;
     }
-    case 'ruin': {
-      parchment.buildRuin(entry.points, b);
+    case 'mountain': {
+      parchment.raiseMountain(entry.points, b, scale);
       if (live) {
         commitTerrain(true);
         synth.thud(0.35);
@@ -646,23 +646,23 @@ function forceKind(result, tool = opts.tool) {
   const enclosed = () => pts.length >= 4 && parchment._area(pts) > 0.0015;
   switch (tool) {
     case 'hill':
-      if (result.kind === 'loop' || result.kind === 'ruin' || (!tap && enclosed())) return { ...result, kind: 'loop' };
+      if (result.kind === 'loop' || result.kind === 'mountain' || (!tap && enclosed())) return { ...result, kind: 'loop' };
       toast('Draw a shape to raise a hill.');
       return null;
-    case 'ruin': {
-      if (result.kind === 'ruin') return result;
+    case 'mountain': {
+      if (result.kind === 'mountain') return result;
       if (tap || !enclosed()) {
-        toast('Draw a shape to build a ruin.');
+        toast('Draw a shape to raise a mountain.');
         return null;
       }
-      // Straighten the outline into a few stone walls.
+      // Simplify the outline into a few rocky ridges.
       let poly = simplify([...pts, pts[0]], 0.018).slice(0, -1);
       if (poly.length < 3) poly = simplify([...pts, pts[0]], 0.006).slice(0, -1);
       if (poly.length < 3) {
-        toast('Draw a bigger shape to build a ruin.');
+        toast('Draw a bigger shape to raise a mountain.');
         return null;
       }
-      return { ...result, kind: 'ruin', polygon: poly };
+      return { ...result, kind: 'mountain', polygon: poly };
     }
     case 'river':
       if (tap || result.length < 0.04) {
@@ -710,7 +710,7 @@ function applyStroke(raw, { tool = opts.tool } = {}) {
     albedoDirty = true;
     return null;
   }
-  const source = result.kind === 'ruin' ? result.polygon : result.points;
+  const source = result.kind === 'mountain' ? result.polygon : result.points;
   const entry = {
     kind: result.kind,
     biome: BIOME_ORDER.indexOf(biome.id),
@@ -819,7 +819,7 @@ function applyBatch(entries, { keepRedo = false } = {}) {
   scheduleAutosave();
 }
 
-/** A random but tidy world: a few terraced hills, a ruin, a river or two and some planting. */
+/** A random but tidy world: a few terraced hills, a mountain, a river or two and some planting. */
 function randomEntries(seed = (Math.random() * 0xffffffff) >>> 0) {
   const r = mulberry32(seed);
   const bi = BIOME_ORDER.indexOf(biome.id);
@@ -859,26 +859,26 @@ function randomEntries(seed = (Math.random() * 0xffffffff) >>> 0) {
     }
     push('river', pts);
   }
-  // A ruin on flat ground, if there is a spot away from the hills.
-  for (let tries = 0; tries < 12; tries++) {
+  // One or two rocky mountains on open ground, away from the hills.
+  const mountains = 1 + (r() < 0.5 ? 1 : 0);
+  for (let m = 0, tries = 0; m < mountains && tries < 20; tries++) {
     const c = { x: 0.15 + r() * 0.7, y: 0.15 + r() * 0.7 };
-    if (hills.some((h) => Math.hypot(h.x - c.x, h.y - c.y) < h.r + 0.1)) continue;
-    const s = 0.04 + r() * 0.035;
-    const a = r() * Math.PI;
-    const ca = Math.cos(a);
-    const sa = Math.sin(a);
-    const corners = [
-      [-1, -0.7],
-      [1, -0.7],
-      [1, 0.7],
-      [-1, 0.7],
-    ].map(([x, y]) => ({ x: c.x + (x * ca - y * sa) * s, y: c.y + (x * sa + y * ca) * s }));
-    push('ruin', corners);
-    push('tap', [c]);
-    break;
+    const size = 0.08 + r() * 0.05;
+    if (hills.some((h) => Math.hypot(h.x - c.x, h.y - c.y) < h.r + size + 0.02)) continue;
+    const n = 5 + Math.floor(r() * 3);
+    const ph = r() * 6.283;
+    const corners = [];
+    for (let i = 0; i < n; i++) {
+      const a = ph + (i / n) * Math.PI * 2;
+      const rad = size * (0.75 + r() * 0.45);
+      corners.push({ x: c.x + Math.cos(a) * rad, y: c.y + Math.sin(a) * rad * 0.85 });
+    }
+    push('mountain', corners);
+    hills.push({ x: c.x, y: c.y, r: size, rock: true });
+    m++;
   }
   // Planting: on the hills and scattered.
-  for (const h of hills) push('tap', [{ x: h.x, y: h.y }]);
+  for (const h of hills) if (!h.rock) push('tap', [{ x: h.x, y: h.y }]);
   const scatter = 5 + Math.floor(r() * 5);
   for (let i = 0; i < scatter; i++) push('tap', [{ x: 0.08 + r() * 0.84, y: 0.08 + r() * 0.84 }]);
   return out;
@@ -1107,7 +1107,7 @@ function openOptions(open = optionsPanel.hidden) {
   optionsBtn.setAttribute('aria-pressed', String(open));
 }
 
-const TOOL_NAMES = { auto: 'Draw', hill: 'Hill', ruin: 'Ruin', river: 'River', plant: 'Plant', erase: 'Erase', move: 'Move' };
+const TOOL_NAMES = { auto: 'Draw', hill: 'Hill', mountain: 'Mountain', river: 'River', plant: 'Plant', erase: 'Erase', move: 'Move' };
 function setTool(id, { quiet = false } = {}) {
   if (!TOOL_NAMES[id]) return;
   opts.tool = id;

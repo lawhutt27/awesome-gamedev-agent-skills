@@ -107,13 +107,16 @@ describe('desktop', () => {
     assert.ok(ring > 0.56 && ring < h2 - 0.05, `ring ${ring}`);
   });
 
-  test('an angular loop builds a stone ruin plateau', async () => {
+  test('an angular loop raises a rocky mountain that peaks above the hills', async () => {
     await drawUv(page, circleUv(0.72, 0.3, 0.08, 48, 4));
     const s = await state(page);
-    assert.equal(s.history.at(-1), 'ruin');
+    assert.equal(s.history.at(-1), 'mountain');
     await settle(page);
-    assert.ok((await sample(page, 0.72, 0.3, 1)) > 0.5, 'stone mask');
-    assert.ok((await sample(page, 0.72, 0.3)) > 0.55, 'plateau');
+    assert.ok((await sample(page, 0.72, 0.3, 1)) > 0.5, 'rock mask');
+    const peak = await sample(page, 0.72, 0.3);
+    const flank = await sample(page, 0.72 + 0.055, 0.3);
+    assert.ok(peak > 0.8, `tall peak (${peak})`);
+    assert.ok(flank > 0.52 && flank < peak - 0.1, `slopes down to the foot (${flank})`);
   });
 
   const river = riverUv(0.12, 0.85, 0.88, 0.7);
@@ -183,7 +186,7 @@ describe('desktop', () => {
     assert.equal(s.rivers, 0);
     assert.equal(s.flowDrawn, 0);
     assert.ok(Math.abs((await sample(page, ...mid)) - 0.5) < 0.02, 'river filled back in');
-    await page.keyboard.press('Control+z'); // ruin
+    await page.keyboard.press('Control+z'); // mountain
     await settle(page);
     assert.ok((await sample(page, 0.72, 0.3, 1)) < 0.05);
   });

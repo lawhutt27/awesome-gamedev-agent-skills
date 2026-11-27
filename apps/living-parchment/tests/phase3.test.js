@@ -224,7 +224,7 @@ test('base32 round-trips arbitrary bytes and stays a plain #name', () => {
 
 const ENTRIES = [
   { kind: 'loop', biome: 0, seed: 123456789, points: canonicalPoints([{ x: 0.2, y: 0.2 }, { x: 0.4, y: 0.25 }, { x: 0.3, y: 0.4 }], 'loop') },
-  { kind: 'ruin', biome: 1, seed: 42, points: canonicalPoints([{ x: 0.6, y: 0.6 }, { x: 0.7, y: 0.6 }, { x: 0.7, y: 0.7 }], 'ruin') },
+  { kind: 'mountain', biome: 1, seed: 42, points: canonicalPoints([{ x: 0.6, y: 0.6 }, { x: 0.7, y: 0.6 }, { x: 0.7, y: 0.7 }], 'mountain') },
   { kind: 'river', biome: 2, seed: 0xffffffff, points: canonicalPoints([{ x: 0.1, y: 0.9 }, { x: 0.5, y: 0.7 }, { x: 0.9, y: 0.85 }], 'river') },
   { kind: 'tap', biome: 0, seed: 7, points: canonicalPoints([{ x: 0.5, y: 0.5 }], 'tap') },
   { kind: 'flick', biome: 1, seed: 8, points: canonicalPoints([{ x: 0.3, y: 0.3 }, { x: 0.33, y: 0.31 }], 'flick') },

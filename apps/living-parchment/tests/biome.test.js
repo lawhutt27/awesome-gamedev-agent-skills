@@ -11,10 +11,10 @@ test('three biomes with complete palettes and weights', () => {
   BIOME_ORDER.forEach((id, row) => {
     const b = BIOMES[id];
     assert.equal(b.row, row);
-    for (const k of ['ink', 'hillWash', 'hillEdge', 'ruinStone', 'bankWash', 'waterInk', 'waterDeep', 'waterGlint', 'contour', 'background', 'table']) {
+    for (const k of ['ink', 'hillWash', 'hillEdge', 'rock', 'snow', 'bankWash', 'waterInk', 'waterDeep', 'waterGlint', 'contour', 'background', 'table']) {
       assert.match(b[k], HEX, `${id}.${k}`);
     }
-    for (const ctx of ['flat', 'hill', 'ruin', 'water']) {
+    for (const ctx of ['flat', 'hill', 'rock', 'water']) {
       assert.equal(b.weights[ctx].length, SPRITE_TYPES.length);
       assert.ok(b.weights[ctx].reduce((a, c) => a + c, 0) > 0);
     }
@@ -37,7 +37,7 @@ test('pickWeighted respects weights and bounds', () => {
 test('terrainContext maps height and masks to flora contexts', () => {
   assert.equal(terrainContext(0.5, 0, 0), 'flat');
   assert.equal(terrainContext(0.7, 0, 0), 'hill');
-  assert.equal(terrainContext(0.62, 0.9, 0), 'ruin');
+  assert.equal(terrainContext(0.62, 0.9, 0), 'rock');
   assert.equal(terrainContext(0.35, 0, 1), 'water');
   assert.equal(terrainContext(0.5, 0, 0.6), 'water');
 });

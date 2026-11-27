@@ -11,7 +11,8 @@
 //   per entry: u8 (kind | size << 4) | u8 (biome | plant << 4) | u32 seed | u16 n | n * (u16 x, u16 y)
 // The high nibbles were always zero in earlier links, which therefore still decode the same.
 
-export const KINDS = ['loop', 'ruin', 'river', 'tap', 'flick', 'erase', 'row'];
+// 'mountain' sits where 'ruin' used to, so older links replay their ruins as mountains.
+export const KINDS = ['loop', 'mountain', 'river', 'tap', 'flick', 'erase', 'row'];
 /** Brush size codes as stored (0 keeps old links at the original size). */
 export const BRUSH_SIZES = [
   { id: 'normal', label: 'Normal', scale: 1 },
@@ -65,7 +66,7 @@ export function simplify(pts, eps = 0.0012) {
 
 /** Canonical points for a stroke: simplified, then snapped to the quantization grid. */
 export function canonicalPoints(pts, kind) {
-  const s = kind === 'ruin' || kind === 'tap' || pts.length < 3 ? pts : simplify(pts);
+  const s = kind === 'mountain' || kind === 'tap' || pts.length < 3 ? pts : simplify(pts);
   return s.slice(0, 4000).map((p) => ({ x: dequantize(quantize(p.x)), y: dequantize(quantize(p.y)) }));
 }
 

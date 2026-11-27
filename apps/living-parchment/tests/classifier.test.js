@@ -120,10 +120,10 @@ test('loop that overshoots its start still counts and is trimmed', () => {
   assert.ok(r.points.length < pts.length);
 });
 
-test('angular loops (>= 3 sharp corners) -> ruin with a polygon footprint', () => {
+test('angular loops (>= 3 sharp corners) -> mountain with a polygon footprint', () => {
   for (const sides of [3, 4, 5]) {
     const r = classifyStroke(stroke(polygon(0.5, 0.5, 0.12, sides, 15, 0.004)));
-    assert.equal(r.kind, 'ruin', `${sides} sides`);
+    assert.equal(r.kind, 'mountain', `${sides} sides`);
     assert.equal(r.polygon.length, sides);
   }
 });
@@ -155,7 +155,7 @@ test('short flick (moves, but too short for a river) -> flick', () => {
 test('tiny closed scribble below the loop minimum is not a hill', () => {
   const r = classifyStroke(stroke(circle(0.5, 0.5, 0.012, 30)));
   assert.notEqual(r.kind, 'loop');
-  assert.notEqual(r.kind, 'ruin');
+  assert.notEqual(r.kind, 'mountain');
 });
 
 test('thresholds can be overridden', () => {

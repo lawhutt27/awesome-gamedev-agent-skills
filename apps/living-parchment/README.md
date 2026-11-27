@@ -16,7 +16,7 @@ npm run build      # static site in dist/
 | Gesture | What it makes |
 | --- | --- |
 | Closed loop | A terraced hill. Loops drawn inside a hill stack a higher terrace. |
-| Closed loop with 3 or more sharp corners | A stone ruin: inked foundation walls on a flat plateau. |
+| Closed loop with 3 or more sharp corners | A rocky mountain: craggy stacked slopes, ridges from every corner to the summit, hachures and a snow cap. |
 | Open stroke | A river carved below the water table. The water flows the way you drew it. |
 | Tap (or a short flick) | A cluster (or a row) of paper-cutout trees, reeds, standing stones or lanterns, chosen by biome and terrain. |
 | Two fingers | Twist to orbit, drag up or down to tilt, pinch to zoom. **Zoom runs into the Dimensional Fold:** pinch out past the closest zoom to sink to ground level at 65°; pinch in past the widest zoom for a flat 15° top-down map. A second finger cancels the stroke in progress. |
@@ -25,7 +25,7 @@ npm run build      # static site in dist/
 | Other keys | `Ctrl/Cmd+Z` undo, `Ctrl/Cmd+Shift+Z` or `Ctrl+Y` redo, `1` `2` `3` biomes, `V` walk, `O` options, `P` photo, `H` help. |
 
 The **tool rail** on the left can override the shape grammar: **Draw** (the shape decides),
-**Hill**, **Ruin** and **River** (any stroke makes that), **Plant** (tap a cluster or drag a row),
+**Hill**, **Mountain** and **River** (any stroke makes that), **Plant** (tap a cluster or drag a row),
 **Erase** (rub the page back to bare paper, removing planting and splitting rivers) and **Move**
 (one-finger drag orbits, right-drag pans).
 
@@ -35,7 +35,7 @@ eraser size), what to plant (by biome, or always trees, reeds, stones or lantern
 outlines, contour lines, wind, flowing water and sound, and full screen. Options are remembered
 in the browser; brush size and planting are stored with each stroke so shared links rebuild them.
 
-The bottom bar switches between the **Moss**, **Autumn** and **Moon** biomes (Mossy Ruin,
+The bottom bar switches between the **Moss**, **Autumn** and **Moon** biomes (Mossy Vale,
 Autumn Ridge, Moonlit Tide: light, water ink, contour ink and sprite art all change), **Undo**
 steps back up to 10 strokes, **Redo** replays them (strokes carry their own seeds, so a redo is
 exact) and **Clear** wipes the page (also undoable). On the right, **Help** opens the how-to-play
@@ -55,11 +55,11 @@ src/
 ├── render/
 │   └── InkEdgePass.js       # Screen-space Sobel + depth-Laplacian ink edges, tone mapping
 ├── input/
-│   ├── GestureClassifier.js # Loop vs. ruin vs. river vs. tap ($1 + corner analysis), gestures
+│   ├── GestureClassifier.js # Loop vs. mountain vs. river vs. tap ($1 + corner analysis), gestures
 │   ├── CameraRig.js         # Dimensional Fold: 15° map -> 65° first person, walking
 │   └── Thumbstick.js        # Virtual stick + WASD
 ├── world/
-│   ├── BiomeConfig.js       # Mossy Ruin, Autumn Ridge, Moonlit Tide palettes
+│   ├── BiomeConfig.js       # Mossy Vale, Autumn Ridge, Moonlit Tide palettes
 │   ├── SpriteInstancer.js   # Procedural cutout atlases, instanced billboards, flow particles
 │   ├── WorldSeed.js         # Replayable stroke log <-> compact link code
 │   └── Exporter.js          # Bake to plain meshes and export .glb
@@ -94,7 +94,7 @@ src/
 - **Ink edges.** The scene renders into a multisampled half-float target with a depth texture. A
   full-screen pass inks silhouettes (Sobel on linear depth) and creases (depth Laplacian, which
   ignores flat ground at grazing angles), heavier at ground level than from above.
-- **Projected cliff ink.** The page texture is painted from above, so steep terrace and ruin walls
+- **Projected cliff ink.** The page texture is painted from above, so steep terraces and mountain faces
   get a side-projected (triplanar on X/Z) strata-and-hatching texture instead of a smear. This
   covers what `three-projected-material` was suggested for without adding the dependency.
 - **World links.** Every committed stroke is logged with its points (simplified and quantized
@@ -117,7 +117,7 @@ npm test           # unit tests: stroke geometry, $1 recognizer, classifier, cam
 npm run test:e2e   # builds, serves dist/ and drives the app in headless Chromium
 ```
 
-The browser suite draws real loops, ruins, rivers, taps and flicks through pointer events, then
+The browser suite draws real loops, mountains, rivers, taps and flicks through pointer events, then
 checks the composed height and mask data, sprite and particle counts, undo (including the 10-step
 limit and undoing Clear), biome switching, orbit and wheel zoom, touch pinch cancelling a stroke,
 the portrait phone layout, audio unlock, WebGL context loss and steady-state memory, plus the
@@ -130,6 +130,11 @@ go to `test-results/`. It uses the `playwright` package and needs a Chromium it 
 
 ## Notes
 
+- Mountains replaced the earlier stone ruins. They use the same gesture and the same slot in
+  world links, so a link made with ruins now opens with mountains in their place.
 - Walking has no collision with sprites; you pass through paper cutouts.
+- The .glb is a 10 × 10 unit diorama (161 × 161 vertices, a 1024² page texture, trees as
+  crossed alpha cards, the cardboard rim included, water painted onto the riverbed rather than a
+  separate surface). Scale it up for a small stylized level; add collision in the engine.
 - World links store strokes, not pixels, so a link made by a future version with a different
   brush may replay slightly differently. The format is versioned (`w1`).

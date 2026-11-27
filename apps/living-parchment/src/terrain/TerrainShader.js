@@ -205,7 +205,7 @@ float lpBands;`,
   float aboveSea = smoothstep(0.515, 0.545, h);
   diffuseColor.rgb = mix(diffuseColor.rgb, uContour, clamp(line * 0.3 + major * 0.45, 0.0, 0.7) * aboveSea * uContourAmt);
 
-  // Projected cliff ink: the page is painted from above, so steep terrace and ruin walls
+  // Projected cliff ink: the page is painted from above, so steep terraces and mountain faces
   // would smear it. Side-project hand-drawn strata and hatching onto them instead
   // (triplanar on X/Z, in world space, so nothing stretches with the slope).
   vec3 wn = normalize(vWN);
