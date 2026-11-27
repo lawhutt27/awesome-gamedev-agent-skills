@@ -3,3 +3,4 @@ dist/
 test-results/
 *.png
 !public/*.png
+dist-single

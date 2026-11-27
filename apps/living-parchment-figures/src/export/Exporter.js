@@ -13,7 +13,7 @@ import { buildCharacter, MORPHS } from '../build/Builder.js';
 import { buildSkeleton } from '../rig/Skeleton.js';
 import { buildClips } from '../rig/Animations.js';
 import { SLOT_LABELS } from '../body/PartsCatalog.js';
-import { zipFiles } from './Zip.js';
+import { zipFiles, zipSingle } from './Zip.js';
 import { randomize, shiftPalette, rng, clone } from '../state/State.js';
 
 export const DETAIL_LEVELS = { high: 1, medium: 0.6, low: 0.35 };
@@ -208,9 +208,39 @@ export async function exportCrowd(state, count = 10, seed = 1, opts = {}) {
   return zipFiles(files);
 }
 
-/** Save bytes as a download in the browser. */
-export function download(data, filename, type = 'application/octet-stream') {
+// Inside a claude.ai Artifact the page is sandboxed, so a plain <a download> does nothing there.
+// The viewer's `downloads` capability saves files instead; it takes .zip, so a lone file goes
+// inside one. Opened as a normal page (or the offline .html), the browser download is used.
+let downloadsApi;
+function artifactDownloads() {
+  if (downloadsApi === undefined) {
+    downloadsApi = globalThis.claude?.use ? globalThis.claude.use('downloads').catch(() => null) : Promise.resolve(null);
+  }
+  return downloadsApi;
+}
+
+/**
+ * Save bytes as a download. Resolves to a short note for the status line when the file went
+ * through the Artifact viewer (zipped or cancelled), or '' for an ordinary browser download.
+ */
+export async function download(data, filename, type = 'application/octet-stream') {
   const blob = data instanceof Blob ? data : new Blob([data], { type });
+  const api = await artifactDownloads();
+  if (api) {
+    let name = filename;
+    let out = blob;
+    if (!/\.zip$/i.test(filename)) {
+      const ext = filename.split('.').pop();
+      name = `${filename.replace(/\.[^.]+$/, '')}-${ext}.zip`;
+      out = new Blob([zipSingle(filename, new Uint8Array(await blob.arrayBuffer()))], { type: 'application/zip' });
+    }
+    try {
+      await api.save({ filename: name, data: out });
+      return name === filename ? '' : `Saved as ${name}. Unzip it to get ${filename}.`;
+    } catch (err) {
+      return err?.code === 'declined' ? 'Download cancelled.' : 'Downloads are not available here.';
+    }
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -219,4 +249,5 @@ export function download(data, filename, type = 'application/octet-stream') {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return '';
 }

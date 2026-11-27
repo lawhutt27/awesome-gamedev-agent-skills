@@ -740,6 +740,23 @@ body.mode-pose .rail {
 .export-card label {
   font-size: 14px;
 }
+.export-card label.grow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.export-card input[type='text'] {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(110, 70, 40, 0.35);
+  background: #fffaf0;
+  color: var(--ink);
+  font: 13px ui-monospace, monospace;
+}
 .export-card select {
   margin-left: 4px;
   padding: 4px 6px;
