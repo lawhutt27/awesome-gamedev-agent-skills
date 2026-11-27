@@ -228,6 +228,12 @@ const ENTRIES = [
   { kind: 'river', biome: 2, seed: 0xffffffff, points: canonicalPoints([{ x: 0.1, y: 0.9 }, { x: 0.5, y: 0.7 }, { x: 0.9, y: 0.85 }], 'river') },
   { kind: 'tap', biome: 0, seed: 7, points: canonicalPoints([{ x: 0.5, y: 0.5 }], 'tap') },
   { kind: 'flick', biome: 1, seed: 8, points: canonicalPoints([{ x: 0.3, y: 0.3 }, { x: 0.33, y: 0.31 }], 'flick') },
+  { kind: 'lake', biome: 2, seed: 9, size: 2, points: canonicalPoints([{ x: 0.4, y: 0.4 }, { x: 0.5, y: 0.4 }, { x: 0.45, y: 0.5 }], 'lake') },
+  { kind: 'road', biome: 0, seed: 10, size: 3, points: canonicalPoints([{ x: 0.1, y: 0.1 }, { x: 0.9, y: 0.2 }], 'road') },
+  { kind: 'raise', biome: 0, seed: 11, size: 1, points: canonicalPoints([{ x: 0.2, y: 0.8 }, { x: 0.3, y: 0.8 }], 'raise') },
+  { kind: 'lower', biome: 1, seed: 12, points: canonicalPoints([{ x: 0.2, y: 0.7 }, { x: 0.3, y: 0.7 }], 'lower') },
+  { kind: 'flatten', biome: 2, seed: 13, points: canonicalPoints([{ x: 0.6, y: 0.2 }, { x: 0.7, y: 0.3 }], 'flatten') },
+  { kind: 'row', biome: 0, seed: 14, plant: 3, points: canonicalPoints([{ x: 0.5, y: 0.1 }, { x: 0.6, y: 0.1 }], 'row') },
 ];
 
 test('binary world format round-trips every stroke kind', () => {
@@ -261,4 +267,28 @@ test('zipSingle writes a valid stored zip with the right CRC', async () => {
   const end = zip.length - 22;
   assert.equal(v.getUint32(end, true), 0x06054b50);
   assert.equal(v.getUint32(end + 16, true), 35 + data.length); // central directory offset
+});
+
+test('zipFiles stores several files with a central directory entry each', async () => {
+  const { zipFiles, crc32 } = await import('../src/world/Exporter.js');
+  const files = [
+    { name: 'map.glb', data: new Uint8Array([1, 2, 3]) },
+    { name: 'README.txt', data: new TextEncoder().encode('hi') },
+  ];
+  const zip = zipFiles(files);
+  const v = new DataView(zip.buffer);
+  const end = zip.length - 22;
+  assert.equal(v.getUint32(end, true), 0x06054b50);
+  assert.equal(v.getUint16(end + 10, true), 2);
+  // Second local header follows the first file's bytes.
+  const second = 30 + 7 + 3;
+  assert.equal(v.getUint32(second, true), 0x04034b50);
+  assert.equal(v.getUint32(second + 14, true), crc32(files[1].data));
+  assert.equal(new TextDecoder().decode(zip.slice(second + 30, second + 40)), 'README.txt');
+});
+
+test('export detail picks 160, 320 or 480 segments', async () => {
+  const { segmentsFor, EXPORT_DEFAULTS } = await import('../src/world/Exporter.js');
+  assert.deepEqual([1, 2, 3, 9, 0].map(segmentsFor), [160, 320, 480, 480, 160]);
+  assert.equal(EXPORT_DEFAULTS.rim, true);
 });

@@ -589,6 +589,122 @@ export class ParchmentCanvas {
     return { path: pts };
   }
 
+  /** Closed loop: a still lake. The basin sinks below the water table, with an inked shore. */
+  carveLake(points, biome, scale = 1) {
+    const ring = smoothPath(points, 2, true);
+    const H = this.H;
+    const S = this.A;
+    const hp = this._path(ring, H, true);
+    const depth = Math.round(Math.max(40, 74 - 18 * (scale - 1))); // lower = deeper
+    this._soft(this.height, hp, { color: 'rgb(104,104,104)', blur: H * 0.012 });
+    // A bowl: the deep fill is the shore shrunk toward its centre (whichever way it was drawn)
+    // and blurred wide, so the bed shelves down from the bank.
+    let cx = 0;
+    let cy = 0;
+    for (const p of ring) {
+      cx += p.x;
+      cy += p.y;
+    }
+    cx /= ring.length;
+    cy /= ring.length;
+    const inner = ring.map((p) => ({ x: cx + (p.x - cx) * 0.6, y: cy + (p.y - cy) * 0.6 }));
+    this._soft(this.height, this._path(inner, H, true), { color: `rgb(${depth},${depth},${depth})`, blur: H * 0.025 });
+    this._soft(this.mask, hp, { color: 'rgb(0,0,255)', blur: H * 0.006 });
+    this._soft(this.flow, this._path(ring, this.F, true), { color: 'rgb(128,128,0)', blur: 2 });
+    const ap = this._path(ring, S, true);
+    const a = this.albedo;
+    a.save();
+    a.globalCompositeOperation = 'multiply';
+    a.fillStyle = rgba(biome.bankWash, 0.32);
+    a.lineWidth = S * 0.02;
+    a.strokeStyle = rgba(biome.bankWash, 0.3);
+    a.stroke(ap);
+    a.fillStyle = rgba(biome.waterInk, 0.42);
+    a.fill(ap);
+    a.restore();
+    this._ink([...ring, ring[0]], { color: biome.ink, width: 2.2, closed: true });
+    // A few ripple marks.
+    for (let i = 0; i < 4; i++) {
+      const c = ring[Math.floor(this.rand() * ring.length)];
+      const t = 0.3 + this.rand() * 0.4;
+      const x = cx + (c.x - cx) * t;
+      const y = cy + (c.y - cy) * t;
+      this._ink(
+        [
+          { x: x - 0.012, y },
+          { x, y: y - 0.003 },
+          { x: x + 0.012, y },
+        ],
+        { color: biome.ink, width: 1, alpha: 0.4, bristle: false },
+      );
+    }
+    return { area: this._area(ring) };
+  }
+
+  /**
+   * Open stroke: a road. Each stretch is levelled across its width to the ground height at its
+   * centre (cut on the uphill side, fill on the downhill side), so it follows hills and bridges
+   * rivers as a causeway. Painted as a dirt track with dashed ink edges.
+   */
+  paveRoad(points, biome, scale = 1) {
+    const path = smoothPath(points, 3, false);
+    const H = this.H;
+    const S = this.A;
+    const width = 0.022 * scale;
+    // Sample centre heights first, so later stretches don't read already-levelled ground.
+    const hs = path.map((p) => {
+      const d = this.height.getImageData(Math.min(H - 1, Math.max(0, Math.floor(p.x * H))), Math.min(H - 1, Math.max(0, Math.floor(p.y * H))), 1, 1).data;
+      return Math.max(d[0], 112); // never below the water table: roads cross rivers on causeways
+    });
+    for (let i = 1; i < path.length; i++) {
+      const seg = new Path2D();
+      seg.moveTo(path[i - 1].x * H, path[i - 1].y * H);
+      seg.lineTo(path[i].x * H, path[i].y * H);
+      const h = Math.round((hs[i - 1] + hs[i]) / 2);
+      this._soft(this.height, seg, { color: `rgb(${h},${h},${h})`, blur: H * 0.004, stroke: H * width });
+      this._soft(this.mask, seg, { color: '#000', blur: H * 0.002, stroke: H * width * 0.9 });
+    }
+    const ap = this._path(path, S, false);
+    const a = this.albedo;
+    a.save();
+    a.lineCap = 'round';
+    a.lineJoin = 'round';
+    a.strokeStyle = rgba(biome.road, 0.85);
+    a.lineWidth = S * width * 0.95;
+    a.stroke(ap);
+    a.globalCompositeOperation = 'multiply';
+    a.strokeStyle = rgba(biome.road, 0.35);
+    a.lineWidth = S * width * 0.45;
+    a.setLineDash([S * 0.006, S * 0.01]);
+    a.stroke(ap);
+    a.restore();
+    const half = width * 0.5;
+    this._ink(this._offset(path, half), { color: biome.ink, width: 1.2, alpha: 0.7, bristle: false });
+    this._ink(this._offset(path, -half), { color: biome.ink, width: 1.2, alpha: 0.7, bristle: false });
+    return { path };
+  }
+
+  /**
+   * Sculpt along a stroke (or a dab for a tap): 'raise' and 'lower' nudge the ground up or down
+   * a little each pass, 'flatten' levels it to the height where the stroke started.
+   */
+  sculpt(points, mode, scale = 1) {
+    const H = this.H;
+    const pts = points.length > 1 ? smoothPath(points, 2, false) : [points[0], { x: points[0].x + 1e-4, y: points[0].y }];
+    const hp = this._path(pts, H, false);
+    const width = H * 0.05 * scale;
+    if (mode === 'flatten') {
+      const p = pts[0];
+      const d = this.height.getImageData(Math.min(H - 1, Math.max(0, Math.floor(p.x * H))), Math.min(H - 1, Math.max(0, Math.floor(p.y * H))), 1, 1).data;
+      this._soft(this.height, hp, { color: `rgb(${d[0]},${d[0]},${d[0]})`, blur: H * 0.012, stroke: width });
+    } else {
+      const amt = Math.round(9 * Math.sqrt(scale));
+      // 'difference' subtracts (|h - amt|), which is h - amt everywhere above the riverbeds.
+      this._soft(this.height, hp, { color: `rgb(${amt},${amt},${amt})`, blur: H * 0.016, stroke: width, op: mode === 'lower' ? 'difference' : 'lighter' });
+    }
+    return { path: pts };
+  }
+
   /** Small ink grass tufts / ground marks under planted sprites. */
   plantMarks(spots, biome) {
     const a = this.albedo;

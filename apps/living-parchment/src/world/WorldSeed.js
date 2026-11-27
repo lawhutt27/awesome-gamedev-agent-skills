@@ -12,12 +12,13 @@
 // The high nibbles were always zero in earlier links, which therefore still decode the same.
 
 // 'mountain' sits where 'ruin' used to, so older links replay their ruins as mountains.
-export const KINDS = ['loop', 'mountain', 'river', 'tap', 'flick', 'erase', 'row'];
+export const KINDS = ['loop', 'mountain', 'river', 'tap', 'flick', 'erase', 'row', 'lake', 'road', 'raise', 'lower', 'flatten'];
 /** Brush size codes as stored (0 keeps old links at the original size). */
 export const BRUSH_SIZES = [
   { id: 'normal', label: 'Normal', scale: 1 },
   { id: 'fine', label: 'Fine', scale: 0.6 },
   { id: 'bold', label: 'Bold', scale: 1.6 },
+  { id: 'huge', label: 'Huge', scale: 2.4 },
 ];
 export const SEED_VERSION = 1;
 const Q = 4095;

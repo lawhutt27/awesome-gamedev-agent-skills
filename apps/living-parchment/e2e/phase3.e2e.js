@@ -38,7 +38,7 @@ describe('ui', () => {
       [...document.querySelectorAll('#tools button, #toolbar button, #sidebar button')].map((b) => b.textContent.trim()),
     );
     assert.deepEqual(labels, [
-      'Draw', 'Hill', 'Mountain', 'River', 'Plant', 'Erase', 'Move',
+      'Draw', 'Hill', 'Mountain', 'River', 'Lake', 'Road', 'Plant', 'Sculpt', 'Erase', 'Move',
       'Help', 'Options', 'Walk', 'Random', 'Photo', 'Share', '.glb',
       'Moss', 'Autumn', 'Moon', 'Undo', 'Redo', 'Clear',
     ]);
@@ -190,9 +190,11 @@ describe('world', () => {
     assert.ok(gltf.meshes.includes('Terrain') && gltf.meshes.includes('Rim'), gltf.meshes.join());
     assert.ok(gltf.meshes.some((n) => /trees|reeds|stones|lanterns/.test(n)));
     assert.ok(gltf.images >= 2 && gltf.masked >= 1);
-    const download = page.waitForEvent('download', { timeout: 60000 });
     await page.click('#export');
-    assert.equal((await download).suggestedFilename(), 'living-parchment.glb');
+    const download = page.waitForEvent('download', { timeout: 60000 });
+    await page.click('#export-go');
+    assert.equal((await download).suggestedFilename(), 'living-parchment-map.glb');
+    await page.click('#export-close');
   });
 
   test('Share puts the world in the link and the link rebuilds it', async () => {

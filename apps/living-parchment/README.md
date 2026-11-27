@@ -25,12 +25,16 @@ npm run build      # static site in dist/
 | Other keys | `Ctrl/Cmd+Z` undo, `Ctrl/Cmd+Shift+Z` or `Ctrl+Y` redo, `1` `2` `3` biomes, `V` walk, `O` options, `P` photo, `H` help. |
 
 The **tool rail** on the left can override the shape grammar: **Draw** (the shape decides),
-**Hill**, **Mountain** and **River** (any stroke makes that), **Plant** (tap a cluster or drag a row),
-**Erase** (rub the page back to bare paper, removing planting and splitting rivers) and **Move**
-(one-finger drag orbits, right-drag pans).
+**Hill**, **Mountain** and **River** (any stroke makes that), **Lake** (any loop fills with still
+water, a bowl that shelves down from the bank), **Road** (a dirt road that levels the ground along
+its length and crosses rivers on a causeway), **Plant** (tap a cluster or drag a row), **Sculpt**
+(**Raise**, **Lower** or **Flatten** the ground where you drag; flatten levels to the height where
+the stroke started), **Erase** (rub the page back to bare paper, removing planting and splitting
+rivers) and **Move** (one-finger drag orbits, right-drag pans). River and Road show **width**
+chips (Thin, Normal, Wide, Very wide), the same setting as Options › Brush size.
 
-**Options** holds brush size (Fine / Normal / Bold: terrace height, river width, planting and
-eraser size), what to plant (by biome, or always trees, reeds, stones or lanterns), camera presets
+**Options** holds brush size (Fine / Normal / Bold / Huge: terrace height, river and road width,
+planting and eraser size), what to plant (by biome, or always trees, reeds, stones or lanterns), camera presets
 (top-down, tilted, low angle, turn, zoom, reset), the sun's direction and height, switches for ink
 outlines, contour lines, wind, flowing water and sound, and full screen. Options are remembered
 in the browser; brush size and planting are stored with each stroke so shared links rebuild them.
@@ -41,8 +45,22 @@ steps back up to 10 strokes, **Redo** replays them (strokes carry their own seed
 exact) and **Clear** wipes the page (also undoable). On the right, **Help** opens the how-to-play
 panel (also shown on the first visit), **Options** opens the options card, **Random** draws a
 whole new world as one undoable step, **Photo** saves a PNG of the view, **Share** saves the whole
-world into the page link, and **.glb** downloads the diorama as a 3D model. The world also
-autosaves in the browser.
+world into the page link, and **.glb** opens **Export for games**. The world also autosaves in
+the browser.
+
+### Export for games
+
+| Setting | Choices |
+| --- | --- |
+| Map size | 10, 50, 100 or 250 m across (1 unit = 1 m in Blender, Godot, Unity and three.js). |
+| Height | As drawn, ×2 (default), ×3 or ×4. Stretches the ground only; trees keep their size. |
+| Detail | Terrain grid of 160, 320 or 480 segments (51k, 205k or 461k triangles). |
+| Trees and plants | Paper cards, markers only (empty nodes named `tree_001`, `reed_002`… with their height in metres as scale, for swapping in your own models) or left out. **Real size** keeps trees about 9 m tall on any map; **Diorama size** scales them with the map like the page. |
+| Include | A flat **Water** mesh over rivers and lakes (riverbeds keep their depth below it), the cardboard rim, and a zip of maps for engine terrain tools. |
+
+With maps on, the download is a zip of `map.glb`, `heightmap.png` (8-bit), `heightmap-513x513.r16`
+(16-bit little-endian, Unity's Import Raw), `splatmap.png` (red grass, green rock, blue water),
+`colormap.png` (the painted page) and a `README.txt` with the metres needed to line them up.
 
 ## How it works
 
@@ -103,7 +121,8 @@ src/
   The log is packed to bytes, deflated and base32-encoded into `#w1…`, which is a plain hash and
   works inside the claude.ai artifact viewer too.
 - **.glb export.** GPU-only effects are baked on the CPU: displaced terrain with water painted
-  into its texture, the rim, and crossed alpha-masked cards for every sprite. Where the host only
+  into its texture, an optional water surface and rim, and crossed alpha-masked cards (or marker
+  nodes) for every sprite. Where the host only
   allows common file types (the claude.ai viewer) the file is wrapped in a zip.
 - **Performance.** Pixel ratio capped at 2, one shadow-casting light, about 10 draw calls,
   no allocations in the frame loop, and texture uploads only on change.
@@ -117,7 +136,7 @@ npm test           # unit tests: stroke geometry, $1 recognizer, classifier, cam
 npm run test:e2e   # builds, serves dist/ and drives the app in headless Chromium
 ```
 
-The browser suite draws real loops, mountains, rivers, taps and flicks through pointer events, then
+The browser suite draws real loops, mountains, rivers, lakes, roads, sculpt strokes, taps and flicks through pointer events, then
 checks the composed height and mask data, sprite and particle counts, undo (including the 10-step
 limit and undoing Clear), biome switching, orbit and wheel zoom, touch pinch cancelling a stroke,
 the portrait phone layout, audio unlock, WebGL context loss and steady-state memory, plus the
@@ -125,7 +144,8 @@ English labels and help panel, folding to ground level, walking, looking and pla
 .glb export (parsed back), share links that rebuild an identical world, and autosave; and every
 tool, erase with undo and redo, brush sizes, planting choices, Random, Photo, the Options switches
 (applied live and remembered), the free camera (Move tool, panning, full orbit, tilt range, zoom
-chain, keys, presets) and the phone layout of the rails and Options sheet. Screenshots
+chain, keys, presets), the phone layout of the rails and Options sheet, and the Export panel (map
+size and height scaling, detail, water and rim, real-size trees, markers, the maps zip). Screenshots
 go to `test-results/`. It uses the `playwright` package and needs a Chromium it can launch.
 
 ## Notes
@@ -133,8 +153,9 @@ go to `test-results/`. It uses the `playwright` package and needs a Chromium it 
 - Mountains replaced the earlier stone ruins. They use the same gesture and the same slot in
   world links, so a link made with ruins now opens with mountains in their place.
 - Walking has no collision with sprites; you pass through paper cutouts.
-- The .glb is a 10 × 10 unit diorama (161 × 161 vertices, a 1024² page texture, trees as
-  crossed alpha cards, the cardboard rim included, water painted onto the riverbed rather than a
-  separate surface). Scale it up for a small stylized level; add collision in the engine.
+- Export gives a visual mesh, not physics: generate collision from the Terrain mesh (or the
+  heightmap) in your engine. The page texture is 1024², so on a 250 m map it is about 25 cm per
+  pixel; use the splat map with your own tiling materials for close-up play.
+- Calling `exportWorld()` with no options still gives the original 10-unit diorama with the rim.
 - World links store strokes, not pixels, so a link made by a future version with a different
   brush may replay slightly differently. The format is versioned (`w1`).

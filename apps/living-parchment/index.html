@@ -40,9 +40,21 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8c3-2 5 2 9 0s6-2 9 0M3 15c3-2 5 2 9 0s6-2 9 0" /></svg>
         <span>River</span>
       </button>
+      <button class="tool-btn" data-tool="lake" role="radio" aria-checked="false" title="Lake: any shape fills a still lake">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13c0-3.3 3.6-6 8-6s8 2.7 8 6-3.6 5-8 5-8-1.7-8-5z" /><path d="M8.5 13.2c1.1-.7 2.3-.7 3.5 0s2.4.7 3.5 0" /></svg>
+        <span>Lake</span>
+      </button>
+      <button class="tool-btn" data-tool="road" role="radio" aria-checked="false" title="Road: a level dirt road that follows the ground">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 21 10.2 3M17 21 13.8 3M12 6.5v2M12 11.5v2M12 16.5v2" /></svg>
+        <span>Road</span>
+      </button>
       <button class="tool-btn" data-tool="plant" role="radio" aria-checked="false" title="Plant: tap for a cluster, drag for a row">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V10m0 0c-4 0-6-3-6-6 4 0 6 2 6 6zm0 2c3 0 6-2 6-5-3 0-6 2-6 5z" /></svg>
         <span>Plant</span>
+      </button>
+      <button class="tool-btn" data-tool="sculpt" role="radio" aria-checked="false" title="Sculpt: raise, lower or flatten the ground by hand">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19c3.5-1 4.5-4.5 9-4.5s5.5 3.5 9 4.5M12 12V4m0 0L9 7m3-3 3 3" /></svg>
+        <span>Sculpt</span>
       </button>
       <button class="tool-btn" data-tool="erase" role="radio" aria-checked="false" title="Erase: rub the page back to bare paper">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 20h11M4.5 15.5l8.5-9.5 6 6-7.5 8H9z" /></svg>
@@ -53,6 +65,18 @@
         <span>Move</span>
       </button>
     </nav>
+
+    <div id="sculpt-modes" class="sculpt-modes seg" role="radiogroup" aria-label="Sculpt" hidden>
+      <button role="radio" data-sculpt="raise" aria-checked="true">Raise</button>
+      <button role="radio" data-sculpt="lower" aria-checked="false">Lower</button>
+      <button role="radio" data-sculpt="flatten" aria-checked="false">Flatten</button>
+    </div>
+    <div id="width-modes" class="sculpt-modes seg" role="radiogroup" aria-label="Width" hidden>
+      <button role="radio" data-size="1" aria-checked="false">Thin</button>
+      <button role="radio" data-size="0" aria-checked="true">Normal</button>
+      <button role="radio" data-size="2" aria-checked="false">Wide</button>
+      <button role="radio" data-size="3" aria-checked="false">Very wide</button>
+    </div>
 
     <nav id="sidebar" class="sidebar" aria-label="View and world">
       <button class="chip" id="help" title="How to play (H)" aria-haspopup="dialog">
@@ -79,7 +103,7 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></svg>
         <span>Share</span>
       </button>
-      <button class="chip" id="export" title="Download as a .glb 3D model">
+      <button class="chip" id="export" title="Export the map as a 3D model for your game" aria-expanded="false" aria-controls="export-panel">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3" /></svg>
         <span>.glb</span>
       </button>
@@ -133,8 +157,9 @@
           <button role="radio" data-value="1" aria-checked="false">Fine</button>
           <button role="radio" data-value="0" aria-checked="true">Normal</button>
           <button role="radio" data-value="2" aria-checked="false">Bold</button>
+          <button role="radio" data-value="3" aria-checked="false">Huge</button>
         </div>
-        <p class="note">Lower or taller hills, thinner or wider rivers, smaller or bigger planting and erasing.</p>
+        <p class="note">Lower or taller hills, thinner or wider rivers and roads, smaller or bigger planting and erasing.</p>
       </section>
       <section>
         <h3>What to plant</h3>
@@ -183,6 +208,62 @@
       </section>
     </aside>
 
+    <aside id="export-panel" class="options export" aria-label="Export for games" hidden>
+      <header>
+        <h2>Export for games</h2>
+        <button class="opt-close" id="export-close" aria-label="Close export">&times;</button>
+      </header>
+      <section>
+        <h3>Map size</h3>
+        <div class="seg wrap" role="radiogroup" aria-label="Map size" data-exp="size">
+          <button role="radio" data-value="10" aria-checked="false">10 m</button>
+          <button role="radio" data-value="50" aria-checked="false">50 m</button>
+          <button role="radio" data-value="100" aria-checked="true">100 m</button>
+          <button role="radio" data-value="250" aria-checked="false">250 m</button>
+        </div>
+        <p class="note">Width of the whole page in metres (1 unit = 1 m in Blender, Godot, Unity and three.js).</p>
+      </section>
+      <section>
+        <h3>Height</h3>
+        <div class="seg" role="radiogroup" aria-label="Height" data-exp="height">
+          <button role="radio" data-value="1" aria-checked="false">As drawn</button>
+          <button role="radio" data-value="2" aria-checked="true">×2</button>
+          <button role="radio" data-value="3" aria-checked="false">×3</button>
+          <button role="radio" data-value="4" aria-checked="false">×4</button>
+        </div>
+        <p class="note">Stretches hills and mountains upward. Trees keep their size.</p>
+      </section>
+      <section>
+        <h3>Detail</h3>
+        <div class="seg" role="radiogroup" aria-label="Detail" data-exp="detail">
+          <button role="radio" data-value="1" aria-checked="false">Low</button>
+          <button role="radio" data-value="2" aria-checked="true">Medium</button>
+          <button role="radio" data-value="3" aria-checked="false">High</button>
+        </div>
+      </section>
+      <section>
+        <h3>Trees and plants</h3>
+        <div class="seg wrap" role="radiogroup" aria-label="Trees and plants" data-exp="sprites">
+          <button role="radio" data-value="cards" aria-checked="true">Paper cards</button>
+          <button role="radio" data-value="markers" aria-checked="false">Markers only</button>
+          <button role="radio" data-value="none" aria-checked="false">Leave out</button>
+        </div>
+        <div class="seg" role="radiogroup" aria-label="Tree size" data-exp="trees">
+          <button role="radio" data-value="real" aria-checked="true">Real size</button>
+          <button role="radio" data-value="page" aria-checked="false">Diorama size</button>
+        </div>
+        <p class="note">Real size keeps trees about 9 m tall on any map size, so mountains tower over them. Markers are empty points named tree, reed, stone or lantern, for swapping in your own models.</p>
+      </section>
+      <section>
+        <h3>Include</h3>
+        <label class="check"><input type="checkbox" id="exp-water" data-exp="water" checked /> Water surface (a separate mesh over rivers and lakes)</label>
+        <label class="check"><input type="checkbox" id="exp-rim" data-exp="rim" /> Cardboard rim around the page</label>
+        <label class="check"><input type="checkbox" id="exp-maps" data-exp="maps" /> Heightmap and texture masks for terrain tools (zip)</label>
+      </section>
+      <p class="note" id="export-summary"></p>
+      <button class="close" id="export-go">Download</button>
+    </aside>
+
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <div id="help-panel" class="help" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
@@ -199,7 +280,7 @@
           <dt>Tap, or a short flick</dt>
           <dd>Plants trees, reeds, standing stones or lanterns. What grows depends on the biome and the ground.</dd>
           <dt>Tools (left side)</dt>
-          <dd><b>Draw</b> lets the shape decide. <b>Hill</b>, <b>Mountain</b> and <b>River</b> make that thing from any stroke. <b>Plant</b> taps a cluster or drags a row. <b>Erase</b> rubs the page back to bare paper. <b>Move</b> turns the camera with one finger.</dd>
+          <dd><b>Draw</b> lets the shape decide. <b>Hill</b>, <b>Mountain</b>, <b>River</b>, <b>Lake</b> and <b>Road</b> make that thing from any stroke. <b>Plant</b> taps a cluster or drags a row. <b>Sculpt</b> raises, lowers or flattens the ground where you drag. <b>Erase</b> rubs the page back to bare paper. <b>Move</b> turns the camera with one finger.</dd>
           <dt>Moving the camera</dt>
           <dd>Two fingers: twist to turn, slide up or down to tilt, pinch to zoom. Keep pinching out to walk on the page; keep pinching in for a flat map. On a computer: right-drag turns and tilts, middle-drag (or Alt-drag) pans, the wheel zooms, and W A S D slides the map.</dd>
           <dt>Walking</dt>
@@ -211,7 +292,7 @@
           <dt>Undo, Redo, Clear, Random</dt>
           <dd>Undo steps back up to 10 strokes and Redo puts them back. Random draws a whole new world for you (Undo brings yours back).</dd>
           <dt>Photo, Share, .glb</dt>
-          <dd>Photo saves a picture of the view. Share saves the whole world into a link. .glb downloads a 3D model for other three.js projects.</dd>
+          <dd>Photo saves a picture of the view. Share saves the whole world into a link. .glb opens Export for games: pick the map size in metres, the detail, water, rim and plants, and optionally a heightmap and masks for Unity or Godot terrain.</dd>
         </dl>
         <p class="keys">Keys: Q E turn, R F tilt, + − zoom, W A S D pan (or walk), 0 reset view, Ctrl+Z undo, Ctrl+Shift+Z redo, 1 2 3 biomes, V walk, O options, P photo, H help.</p>
         <button class="close" id="help-close">Start drawing</button>

@@ -36,7 +36,7 @@ import { CameraRig, FOLD_DEFAULT, povWeight } from './input/CameraRig.js';
 import { Thumbstick } from './input/Thumbstick.js';
 import { InkEdgePass } from './render/InkEdgePass.js';
 import { canonicalPoints, encodeWorld, decodeWorld, isWorldHash, simplify, BRUSH_SIZES } from './world/WorldSeed.js';
-import { exportGLB, zipSingle } from './world/Exporter.js';
+import { EXPORT_DEFAULTS, exportGLB, exportBundle, zipFiles, zipSingle, segmentsFor, spriteHeight } from './world/Exporter.js';
 import { BIOMES, BIOME_ORDER, DEFAULT_BIOME, pickWeighted, terrainContext } from './world/BiomeConfig.js';
 import { SpriteInstancer, FlowParticles, SPRITE_SIZE } from './world/SpriteInstancer.js';
 import { PaperSynth } from './audio/PaperSynth.js';
@@ -53,6 +53,7 @@ const lowQuality = new URLSearchParams(location.search).get('quality') === 'low'
 const OPTIONS_KEY = 'living-parchment-options';
 const DEFAULT_OPTIONS = {
   tool: 'auto',
+  sculpt: 'raise', // raise | lower | flatten (the Sculpt tool)
   size: 0, // BRUSH_SIZES code
   plant: 0, // 0 = by biome, else sprite type + 1
   ink: true,
@@ -622,6 +623,32 @@ function applyEntry(entry, live) {
       }
       return true;
     }
+    case 'lake': {
+      parchment.carveLake(entry.points, b, scale);
+      if (live) {
+        commitTerrain(false);
+        synth.splash();
+      }
+      return true;
+    }
+    case 'road': {
+      parchment.paveRoad(entry.points, b, scale);
+      if (live) {
+        commitTerrain(false);
+        synth.rustle();
+      }
+      return true;
+    }
+    case 'raise':
+    case 'lower':
+    case 'flatten': {
+      parchment.sculpt(entry.points, entry.kind, scale);
+      if (live) {
+        commitTerrain(entry.kind === 'raise');
+        synth.rustle();
+      }
+      return true;
+    }
     case 'erase': {
       eraseAlong(entry.points, 0.045 * scale);
       if (live) {
@@ -670,6 +697,20 @@ function forceKind(result, tool = opts.tool) {
         return null;
       }
       return { ...result, kind: 'river' };
+    case 'lake':
+      if (tap || !enclosed()) {
+        toast('Draw a shape to fill a lake.');
+        return null;
+      }
+      return { ...result, kind: 'lake' };
+    case 'road':
+      if (tap || result.length < 0.04) {
+        toast('Drag a line to lay a road.');
+        return null;
+      }
+      return { ...result, kind: 'road' };
+    case 'sculpt':
+      return { ...result, kind: opts.sculpt };
     case 'plant':
       return tap ? result : { ...result, kind: pts.length > 1 ? 'row' : 'tap' };
     case 'erase':
@@ -960,40 +1001,139 @@ async function shareWorld() {
   return code;
 }
 
-async function exportWorld({ download = true } = {}) {
-  toast('Folding the diorama into a .glb…', 8000);
-  await new Promise((r) => setTimeout(r, 30)); // let the toast paint
-  const buf = await exportGLB({ parchment, sprites, noise: uniforms.uNoise.value, biome });
-  if (download) {
-    // Inside the claude.ai viewer, pages save files through the `downloads` capability, which
-    // accepts .zip but not .glb; everywhere else a normal download link works.
-    const downloads = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
-    if (downloads) {
-      try {
-        const zip = zipSingle('living-parchment.glb', new Uint8Array(buf));
-        await downloads.save({ filename: 'living-parchment-glb.zip', data: new Blob([zip]) });
-        toast('Saved living-parchment-glb.zip (unzip it for the .glb).');
-      } catch (err) {
-        toast(err?.code === 'declined' ? 'Download cancelled.' : 'Downloads aren’t available here.');
-      }
-      return buf;
+// Export panel settings (kept per browser). These are what a game map usually wants: real-world
+// size, a water surface and no cardboard rim. Calling exportWorld() with no options keeps the
+// plain diorama export (EXPORT_DEFAULTS).
+const EXPORT_KEY = 'living-parchment-export';
+const PANEL_EXPORT = { size: 100, height: 2, detail: 2, sprites: 'cards', trees: 'real', water: true, rim: false, maps: false };
+const expOpts = { ...PANEL_EXPORT };
+try {
+  Object.assign(expOpts, JSON.parse(localStorage.getItem(EXPORT_KEY) || '{}'));
+} catch {
+  /* defaults */
+}
+function saveExportOptions() {
+  try {
+    localStorage.setItem(EXPORT_KEY, JSON.stringify(expOpts));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** Save bytes as a file: the claude.ai `downloads` capability when present, else a link. */
+async function saveFile(name, bytes, type) {
+  const downloads = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
+  if (downloads) {
+    // The viewer accepts .zip but not .glb, so a lone model goes inside a zip there.
+    let fname = name;
+    let data = bytes;
+    if (!name.endsWith('.zip')) {
+      fname = name.replace(/\.[^.]+$/, '') + '-' + name.split('.').pop() + '.zip';
+      data = zipSingle(name, new Uint8Array(bytes));
     }
     try {
-      const url = URL.createObjectURL(new Blob([buf], { type: 'model/gltf-binary' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'living-parchment.glb';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
-      toast(`Saved living-parchment.glb (${Math.round(buf.byteLength / 1024)} KB).`);
-    } catch {
-      toast('This page isn’t allowed to download files here.');
+      await downloads.save({ filename: fname, data: new Blob([data]) });
+      toast(fname === name ? `Saved ${name}.` : `Saved ${fname} (unzip it for the ${name.split('.').pop()}).`);
+    } catch (err) {
+      toast(err?.code === 'declined' ? 'Download cancelled.' : 'Downloads aren’t available here.');
     }
+    return;
   }
+  try {
+    const url = URL.createObjectURL(new Blob([bytes], { type }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast(`Saved ${name} (${Math.round(bytes.byteLength / 1024)} KB).`);
+  } catch {
+    toast('This page isn’t allowed to download files here.');
+  }
+}
+
+/**
+ * Export the world. With no options it is the plain diorama .glb; the panel passes its own
+ * settings. Resolves to the .glb ArrayBuffer (and `files` when maps are on, via exportFiles).
+ */
+async function exportWorld({ download = true, ...overrides } = {}) {
+  const o = { ...EXPORT_DEFAULTS, ...overrides };
+  toast(o.maps ? 'Folding the map and its heightmaps…' : 'Folding the diorama into a .glb…', 8000);
+  await new Promise((r) => setTimeout(r, 30)); // let the toast paint
+  const args = { parchment, sprites, noise: uniforms.uNoise.value, biome };
+  if (o.maps) {
+    const files = await exportBundle(args, o);
+    if (download) await saveFile('living-parchment-map.zip', zipFiles(files), 'application/zip');
+    return files;
+  }
+  const buf = await exportGLB(args, o);
+  if (download) await saveFile(overrides.size ? 'living-parchment-map.glb' : 'living-parchment.glb', buf, 'model/gltf-binary');
   return buf;
 }
+
+const exportPanel = document.getElementById('export-panel');
+const exportBtn = document.getElementById('export');
+function exportSummary() {
+  const seg = segmentsFor(expOpts.detail);
+  const tris = seg * seg * 2;
+  const k = expOpts.size / PAGE_SIZE;
+  // Tallest point on the page right now (mountains), and a typical full-grown tree.
+  let top = 0.5;
+  for (let j = 0; j <= 64; j++) for (let i = 0; i <= 64; i++) top = Math.max(top, parchment.sample(i / 64, j / 64));
+  const peak = (top - 0.5) * HEIGHT_SCALE * k * expOpts.height;
+  const tree = spriteHeight({ type: 0, scale: SPRITE_SIZE[0] }, k, expOpts.trees);
+  const m = (v) => (v < 10 ? v.toFixed(1) : String(Math.round(v)));
+  const fmt = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1000)}k`);
+  const what = expOpts.maps ? 'a zip with map.glb, heightmaps, splat and colour maps' : 'one .glb file';
+  const heights = top > 0.52 ? `highest ground ${m(peak)} m, trees about ${m(tree)} m` : `trees about ${m(tree)} m`;
+  return `${expOpts.size} × ${expOpts.size} m, ${heights}, ${fmt(tris)} triangles. You get ${what}.`;
+}
+function applyExportOptions() {
+  for (const g of exportPanel.querySelectorAll('.seg[data-exp]')) {
+    for (const b of g.querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.value === String(expOpts[g.dataset.exp])));
+  }
+  for (const c of exportPanel.querySelectorAll('input[type=checkbox][data-exp]')) c.checked = !!expOpts[c.dataset.exp];
+  document.getElementById('export-summary').textContent = exportSummary();
+}
+function openExport(open = exportPanel.hidden) {
+  if (open) openOptions(false);
+  exportPanel.hidden = !open;
+  exportBtn.setAttribute('aria-expanded', String(open));
+  exportBtn.setAttribute('aria-pressed', String(open));
+  if (open) applyExportOptions();
+}
+for (const g of exportPanel.querySelectorAll('.seg[data-exp]')) {
+  for (const b of g.querySelectorAll('button')) {
+    b.addEventListener('click', () => {
+      const v = b.dataset.value;
+      expOpts[g.dataset.exp] = g.dataset.exp === 'sprites' || g.dataset.exp === 'trees' ? v : Number(v);
+      saveExportOptions();
+      applyExportOptions();
+    });
+  }
+}
+for (const c of exportPanel.querySelectorAll('input[type=checkbox][data-exp]')) {
+  c.addEventListener('change', () => {
+    expOpts[c.dataset.exp] = c.checked;
+    saveExportOptions();
+    applyExportOptions();
+  });
+}
+document.getElementById('export-close').addEventListener('click', () => openExport(false));
+document.getElementById('export-go').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await exportWorld({ ...expOpts });
+  } catch (err) {
+    console.error(err);
+    toast('Export failed. Try a lower detail.');
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 /** Save a picture of the current view as a PNG. Resolves to the Blob. */
 async function takePhoto({ download = true } = {}) {
@@ -1086,6 +1226,15 @@ const helpPanel = document.getElementById('help-panel');
 const optionsPanel = document.getElementById('options');
 const optionsBtn = document.getElementById('options-btn');
 const toolButtons = [...document.querySelectorAll('.tool-btn')];
+const sculptModes = document.getElementById('sculpt-modes');
+const widthModes = document.getElementById('width-modes');
+const SCULPT_NAMES = { raise: 'Raise', lower: 'Lower', flatten: 'Flatten' };
+function setSculpt(mode) {
+  if (!SCULPT_NAMES[mode]) return;
+  opts.sculpt = mode;
+  for (const b of sculptModes.querySelectorAll('[data-sculpt]')) b.setAttribute('aria-checked', String(b.dataset.sculpt === mode));
+  saveOptions();
+}
 
 function toggleFold() {
   synth.unlock();
@@ -1102,16 +1251,19 @@ function openHelp(open = true) {
   } else document.getElementById('help').focus({ preventScroll: true });
 }
 function openOptions(open = optionsPanel.hidden) {
+  if (open && !exportPanel.hidden) openExport(false);
   optionsPanel.hidden = !open;
   optionsBtn.setAttribute('aria-expanded', String(open));
   optionsBtn.setAttribute('aria-pressed', String(open));
 }
 
-const TOOL_NAMES = { auto: 'Draw', hill: 'Hill', mountain: 'Mountain', river: 'River', plant: 'Plant', erase: 'Erase', move: 'Move' };
+const TOOL_NAMES = { auto: 'Draw', hill: 'Hill', mountain: 'Mountain', river: 'River', lake: 'Lake', road: 'Road', plant: 'Plant', sculpt: 'Sculpt', erase: 'Erase', move: 'Move' };
 function setTool(id, { quiet = false } = {}) {
   if (!TOOL_NAMES[id]) return;
   opts.tool = id;
   for (const b of toolButtons) b.setAttribute('aria-checked', String(b.dataset.tool === id));
+  sculptModes.hidden = id !== 'sculpt';
+  widthModes.hidden = id !== 'river' && id !== 'road';
   if (!rig.pov) canvas.style.cursor = id === 'move' ? 'grab' : 'crosshair';
   saveOptions();
   if (!quiet) {
@@ -1134,6 +1286,7 @@ function applyOptions() {
     for (const b of g.querySelectorAll('button')) b.setAttribute('aria-checked', String(Number(b.dataset.value) === opts[g.dataset.opt]));
   }
   for (const c of optionsPanel.querySelectorAll('input[type=checkbox][data-opt]')) c.checked = !!opts[c.dataset.opt];
+  for (const b of widthModes.querySelectorAll('[data-size]')) b.setAttribute('aria-checked', String(Number(b.dataset.size) === opts.size));
   document.getElementById('opt-sun-angle').value = String(opts.sunAngle);
   document.getElementById('opt-sun-height').value = String(opts.sunHeight);
 }
@@ -1178,6 +1331,20 @@ for (const btn of toolButtons) {
   btn.addEventListener('click', () => {
     synth.unlock();
     setTool(btn.dataset.tool);
+  });
+}
+// River and Road show width chips: the same setting as Options > Brush size.
+for (const b of widthModes.querySelectorAll('[data-size]')) {
+  b.addEventListener('click', () => {
+    opts.size = Number(b.dataset.size);
+    saveOptions();
+    applyOptions();
+  });
+}
+for (const b of sculptModes.querySelectorAll('[data-sculpt]')) {
+  b.addEventListener('click', () => {
+    setSculpt(b.dataset.sculpt);
+    if (opts.tool !== 'sculpt') setTool('sculpt');
   });
 }
 for (const btn of document.querySelectorAll('[data-view]')) {
@@ -1253,7 +1420,7 @@ document.getElementById('random').addEventListener('click', () => {
 });
 document.getElementById('photo').addEventListener('click', () => takePhoto());
 document.getElementById('share').addEventListener('click', () => shareWorld());
-document.getElementById('export').addEventListener('click', () => exportWorld());
+exportBtn.addEventListener('click', () => openExport());
 document.getElementById('help').addEventListener('click', () => openHelp(true));
 document.getElementById('help-close').addEventListener('click', () => openHelp(false));
 helpPanel.addEventListener('click', (e) => {
@@ -1297,10 +1464,13 @@ window.addEventListener('keydown', (e) => {
     openHelp(true);
   } else if (e.key === 'Escape' && !optionsPanel.hidden) {
     openOptions(false);
+  } else if (e.key === 'Escape' && !exportPanel.hidden) {
+    openExport(false);
   }
 });
 window.addEventListener('keyup', (e) => held.delete(e.key.toLowerCase()));
 window.addEventListener('blur', () => held.clear());
+setSculpt(SCULPT_NAMES[opts.sculpt] ? opts.sculpt : 'raise');
 setTool(TOOL_NAMES[opts.tool] ? opts.tool : 'auto', { quiet: true });
 applyOptions();
 
@@ -1430,6 +1600,9 @@ window.__lp = {
   setBiome,
   shareWorld,
   exportWorld,
+  openExport,
+  expOpts,
+  setSculpt,
   loadWorld,
   encodeWorld: () => encodeWorld(worldLog, BIOME_ORDER.indexOf(biome.id)),
   openHelp,
