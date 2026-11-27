@@ -20,17 +20,60 @@
       <span>Draw a <b>loop</b> to raise a hill</span>
       <span>Sharp corners build a <b>ruin</b></span>
       <span>An open line carves a <b>river</b></span>
-      <span><b>Tap</b> to plant · pinch to walk in</span>
+      <span><b>Tap</b> to plant · pinch or scroll to zoom and walk in</span>
     </div>
+
+    <nav id="tools" class="tools" role="radiogroup" aria-label="Drawing tool">
+      <button class="tool-btn" data-tool="auto" role="radio" aria-checked="true" title="Draw: the shape decides what it makes">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4-1L19 8l-3-3L5 16l-1 4zM14 7l3 3" /></svg>
+        <span>Draw</span>
+      </button>
+      <button class="tool-btn" data-tool="hill" role="radio" aria-checked="false" title="Hill: every stroke raises a hill">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 19l6-9 4 5 3-4 7 8z" /></svg>
+        <span>Hill</span>
+      </button>
+      <button class="tool-btn" data-tool="ruin" role="radio" aria-checked="false" title="Ruin: every shape builds a stone ruin">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V9l4-2v13M10 20V5h4v15M16 20V10l4 2v8M3 20h18" /></svg>
+        <span>Ruin</span>
+      </button>
+      <button class="tool-btn" data-tool="river" role="radio" aria-checked="false" title="River: every line carves a river">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8c3-2 5 2 9 0s6-2 9 0M3 15c3-2 5 2 9 0s6-2 9 0" /></svg>
+        <span>River</span>
+      </button>
+      <button class="tool-btn" data-tool="plant" role="radio" aria-checked="false" title="Plant: tap for a cluster, drag for a row">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V10m0 0c-4 0-6-3-6-6 4 0 6 2 6 6zm0 2c3 0 6-2 6-5-3 0-6 2-6 5z" /></svg>
+        <span>Plant</span>
+      </button>
+      <button class="tool-btn" data-tool="erase" role="radio" aria-checked="false" title="Erase: rub the page back to bare paper">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 20h11M4.5 15.5l8.5-9.5 6 6-7.5 8H9z" /></svg>
+        <span>Erase</span>
+      </button>
+      <button class="tool-btn" data-tool="move" role="radio" aria-checked="false" title="Move: drag to turn and tilt, right-drag to pan">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M12 3 9 6m3-3 3 3m-3 15-3-3m3 3 3-3M3 12l3-3m-3 3 3 3m15-3-3-3m3 3-3 3" /></svg>
+        <span>Move</span>
+      </button>
+    </nav>
 
     <nav id="sidebar" class="sidebar" aria-label="View and world">
       <button class="chip" id="help" title="How to play (H)" aria-haspopup="dialog">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17.2v.1" /></svg>
         <span>Help</span>
       </button>
+      <button class="chip" id="options-btn" title="Options (O)" aria-expanded="false" aria-controls="options">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M18 7h2M4 17h3M12 17h8" /><circle cx="15.5" cy="7" r="2.3" /><circle cx="9.5" cy="17" r="2.3" /></svg>
+        <span>Options</span>
+      </button>
       <button class="chip" id="fold" title="Walk on the page (V)" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2" /><path d="M12 8v6m0 0-3 6m3-6 3 6M8 11h8" /></svg>
         <span id="fold-label">Walk</span>
+      </button>
+      <button class="chip" id="random" title="Make a random world (undoable)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8.5 8.5h.01M15.5 8.5h.01M12 12h.01M8.5 15.5h.01M15.5 15.5h.01" stroke-width="3" /></svg>
+        <span>Random</span>
+      </button>
+      <button class="chip" id="photo" title="Save a picture of this view (P)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>
+        <span>Photo</span>
       </button>
       <button class="chip" id="share" title="Save this world to a link">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></svg>
@@ -41,6 +84,16 @@
         <span>.glb</span>
       </button>
     </nav>
+
+    <div id="viewpad" class="viewpad" role="group" aria-label="Camera">
+      <button class="vp" data-view="turn-left" title="Turn left (Q)" aria-label="Turn left">&#8634;</button>
+      <button class="vp" data-view="tilt-up" title="Tilt toward top-down (R)" aria-label="Tilt up">&#9650;</button>
+      <button class="vp" data-view="turn-right" title="Turn right (E)" aria-label="Turn right">&#8635;</button>
+      <button class="vp" data-view="zoom-out" title="Zoom out (-)" aria-label="Zoom out">&minus;</button>
+      <button class="vp" data-view="tilt-down" title="Tilt toward the horizon (F)" aria-label="Tilt down">&#9660;</button>
+      <button class="vp" data-view="zoom-in" title="Zoom in (+)" aria-label="Zoom in">+</button>
+      <button class="vp wide" data-view="reset" title="Reset the view (0)">Reset view</button>
+    </div>
 
     <nav id="toolbar" class="toolbar" aria-label="Tools">
       <div class="biomes" role="radiogroup" aria-label="Biome">
@@ -53,6 +106,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7H4V2M4.6 7.2A8 8 0 1 1 4 13" /></svg>
           <span>Undo</span>
         </button>
+        <button class="stamp tool" id="redo" title="Redo (Ctrl+Shift+Z or Ctrl+Y)" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 7h5V2M19.4 7.2A8 8 0 1 0 20 13" /></svg>
+          <span>Redo</span>
+        </button>
         <button class="stamp tool" id="clear" title="Clear page">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M9 6V4h6v2M7 6l1 14h8l1-14" /></svg>
           <span>Clear</span>
@@ -64,6 +121,67 @@
     <div id="stick" class="stick" aria-label="Walk" role="application">
       <div class="knob"></div>
     </div>
+
+    <aside id="options" class="options" aria-label="Options" hidden>
+      <header>
+        <h2>Options</h2>
+        <button class="opt-close" id="options-close" aria-label="Close options">&times;</button>
+      </header>
+      <section>
+        <h3>Brush size</h3>
+        <div class="seg" role="radiogroup" aria-label="Brush size" data-opt="size">
+          <button role="radio" data-value="1" aria-checked="false">Fine</button>
+          <button role="radio" data-value="0" aria-checked="true">Normal</button>
+          <button role="radio" data-value="2" aria-checked="false">Bold</button>
+        </div>
+        <p class="note">Lower or taller hills, thinner or wider rivers, smaller or bigger planting and erasing.</p>
+      </section>
+      <section>
+        <h3>What to plant</h3>
+        <div class="seg wrap" role="radiogroup" aria-label="What to plant" data-opt="plant">
+          <button role="radio" data-value="0" aria-checked="true">By biome</button>
+          <button role="radio" data-value="1" aria-checked="false">Trees</button>
+          <button role="radio" data-value="2" aria-checked="false">Reeds</button>
+          <button role="radio" data-value="3" aria-checked="false">Stones</button>
+          <button role="radio" data-value="4" aria-checked="false">Lanterns</button>
+        </div>
+      </section>
+      <section>
+        <h3>Camera</h3>
+        <div class="seg wrap">
+          <button data-view="top">Top-down</button>
+          <button data-view="tilt">Tilted</button>
+          <button data-view="low">Low angle</button>
+        </div>
+        <div class="seg wrap">
+          <button data-view="turn-left">&#8634; Turn</button>
+          <button data-view="turn-right">Turn &#8635;</button>
+          <button data-view="zoom-out">&minus; Zoom</button>
+          <button data-view="zoom-in">Zoom +</button>
+          <button data-view="reset">Reset view</button>
+        </div>
+      </section>
+      <section>
+        <h3>Light</h3>
+        <label class="slider">Sun direction <input type="range" id="opt-sun-angle" min="-180" max="180" step="1" value="0" /></label>
+        <label class="slider">Sun height <input type="range" id="opt-sun-height" min="0.3" max="1.8" step="0.05" value="1" /></label>
+      </section>
+      <section>
+        <h3>Show</h3>
+        <label class="check"><input type="checkbox" data-opt="ink" checked /> Ink outlines</label>
+        <label class="check"><input type="checkbox" data-opt="contours" checked /> Contour lines</label>
+        <label class="check"><input type="checkbox" data-opt="wind" checked /> Wind in the trees</label>
+        <label class="check"><input type="checkbox" data-opt="water" checked /> Flowing water</label>
+        <label class="check"><input type="checkbox" data-opt="sound" checked /> Sound</label>
+      </section>
+      <section>
+        <h3>Screen</h3>
+        <div class="seg wrap">
+          <button id="fullscreen">Full screen</button>
+          <button id="options-reset">Default options</button>
+        </div>
+      </section>
+    </aside>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
@@ -80,16 +198,22 @@
           <dd>Carves a river. The water flows the way you drew it.</dd>
           <dt>Tap, or a short flick</dt>
           <dd>Plants trees, reeds, standing stones or lanterns. What grows depends on the biome and the ground.</dd>
-          <dt>Two fingers</dt>
-          <dd>Twist to turn the page, slide up or down to tilt. Pinch in for a flat map; pinch out to walk on the page.</dd>
+          <dt>Tools (left side)</dt>
+          <dd><b>Draw</b> lets the shape decide. <b>Hill</b>, <b>Ruin</b> and <b>River</b> make that thing from any stroke. <b>Plant</b> taps a cluster or drags a row. <b>Erase</b> rubs the page back to bare paper. <b>Move</b> turns the camera with one finger.</dd>
+          <dt>Moving the camera</dt>
+          <dd>Two fingers: twist to turn, slide up or down to tilt, pinch to zoom. Keep pinching out to walk on the page; keep pinching in for a flat map. On a computer: right-drag turns and tilts, middle-drag (or Alt-drag) pans, the wheel zooms, and W A S D slides the map.</dd>
           <dt>Walking</dt>
           <dd>Use the thumbstick (or W A S D) to walk and drag to look around. Tap still plants. Press <b>Map</b> or pinch in to fly back up.</dd>
           <dt>Biomes</dt>
           <dd><b>Moss</b> (Mossy Ruin), <b>Autumn</b> (Autumn Ridge) and <b>Moon</b> (Moonlit Tide) change the light, the water and the paper cutouts.</dd>
-          <dt>Undo, Clear, Share, .glb</dt>
-          <dd>Undo steps back up to 10 strokes. Share saves the whole world into a link. .glb downloads a 3D model for other three.js projects.</dd>
+          <dt>Options</dt>
+          <dd>Brush size, what to plant, camera angles, the sun, and switches for outlines, contours, wind, water and sound.</dd>
+          <dt>Undo, Redo, Clear, Random</dt>
+          <dd>Undo steps back up to 10 strokes and Redo puts them back. Random draws a whole new world for you (Undo brings yours back).</dd>
+          <dt>Photo, Share, .glb</dt>
+          <dd>Photo saves a picture of the view. Share saves the whole world into a link. .glb downloads a 3D model for other three.js projects.</dd>
         </dl>
-        <p class="keys">Desktop: right-drag to turn, wheel to fold in and out, Ctrl+Z undo, 1 2 3 biomes, V walk, H help.</p>
+        <p class="keys">Keys: Q E turn, R F tilt, + − zoom, W A S D pan (or walk), 0 reset view, Ctrl+Z undo, Ctrl+Shift+Z redo, 1 2 3 biomes, V walk, O options, P photo, H help.</p>
         <button class="close" id="help-close">Start drawing</button>
       </div>
     </div>

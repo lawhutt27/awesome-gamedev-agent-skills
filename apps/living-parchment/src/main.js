@@ -6,6 +6,9 @@
 //          planted paper-cutout flora, with three switchable biomes and a 10-step undo.
 // Phase 3: the pinch "Dimensional Fold" from a flat map down to a walkable first-person view,
 //          a screen-space ink-edge pass, projected cliff ink, .glb export and world links.
+// Extras:  a tool rail (force hill / ruin / river / plant, erase, move the camera), an Options
+//          panel (brush size, what to plant, camera presets, sun, display switches), redo,
+//          random worlds, photos and a free desktop camera (orbit, tilt, pan, zoom).
 
 import * as THREE from 'three';
 import { createNoise2D, createNoise4D } from 'simplex-noise';
@@ -32,7 +35,7 @@ import { GestureClassifier } from './input/GestureClassifier.js';
 import { CameraRig, FOLD_DEFAULT, povWeight } from './input/CameraRig.js';
 import { Thumbstick } from './input/Thumbstick.js';
 import { InkEdgePass } from './render/InkEdgePass.js';
-import { canonicalPoints, encodeWorld, decodeWorld, isWorldHash } from './world/WorldSeed.js';
+import { canonicalPoints, encodeWorld, decodeWorld, isWorldHash, simplify, BRUSH_SIZES } from './world/WorldSeed.js';
 import { exportGLB, zipSingle } from './world/Exporter.js';
 import { BIOMES, BIOME_ORDER, DEFAULT_BIOME, pickWeighted, terrainContext } from './world/BiomeConfig.js';
 import { SpriteInstancer, FlowParticles, SPRITE_SIZE } from './world/SpriteInstancer.js';
@@ -42,6 +45,38 @@ const canvas = document.getElementById('scene');
 const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
 // ?quality=low trades sharpness for speed (software GPUs, CI, very old phones).
 const lowQuality = new URLSearchParams(location.search).get('quality') === 'low';
+
+// ------------------------------------------------------------------ options
+
+// Options (kept per browser; none of them change what a shared link rebuilds except
+// brush size and planting, which are stored with each stroke).
+const OPTIONS_KEY = 'living-parchment-options';
+const DEFAULT_OPTIONS = {
+  tool: 'auto',
+  size: 0, // BRUSH_SIZES code
+  plant: 0, // 0 = by biome, else sprite type + 1
+  ink: true,
+  contours: true,
+  wind: true,
+  water: true,
+  sound: true,
+  sunAngle: 0,
+  sunHeight: 1,
+};
+const opts = { ...DEFAULT_OPTIONS };
+try {
+  Object.assign(opts, JSON.parse(localStorage.getItem(OPTIONS_KEY) || '{}'));
+} catch {
+  /* storage unavailable or corrupt: defaults */
+}
+function saveOptions() {
+  try {
+    localStorage.setItem(OPTIONS_KEY, JSON.stringify(opts));
+  } catch {
+    /* storage unavailable */
+  }
+}
+const brushScale = (code) => (BRUSH_SIZES[code] ?? BRUSH_SIZES[0]).scale;
 
 // ------------------------------------------------------------------ renderer + scene
 
@@ -248,11 +283,16 @@ function biomeLook(b) {
 }
 const look = biomeLook(biome); // the live, interpolated look
 const _dir = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
 
 function applyLook(l) {
   sun.color.copy(l.sunColor);
   sun.intensity = l.sunIntensity;
   _dir.copy(l.sunDir).normalize();
+  // Options: swing the sun round the page and raise or lower it.
+  _dir.applyAxisAngle(_up, (opts.sunAngle * Math.PI) / 180);
+  _dir.y *= opts.sunHeight;
+  _dir.normalize();
   sun.position.copy(_dir).multiplyScalar(14);
   hemi.color.copy(l.sky);
   hemi.groundColor.copy(l.ground);
@@ -421,9 +461,14 @@ let strokesMade = 0;
 
 /** Replayable log of committed strokes (see WorldSeed.js). Undo pops it, Clear empties it. */
 let worldLog = [];
+/** What Undo took away, newest last: {type: 'entry', entry} | {type: 'clear'} | {type: 'batch', entries}. */
+let redoStack = [];
+const redoBtn = document.getElementById('redo');
+
 
 function refreshUi() {
   undoBtn.disabled = !parchment.canUndo;
+  redoBtn.disabled = redoStack.length === 0;
 }
 
 function onFirstStroke() {
@@ -431,11 +476,30 @@ function onFirstStroke() {
   if (strokesMade === 2) hint.classList.add('faded');
 }
 
-/** Plant a cluster (tap) or a row (flick) of sprites. Returns how many were planted. */
-function plant(kind, pts, b, r, live) {
+/**
+ * Plant a cluster (tap), a short row (flick) or a row along a dragged path (row) of sprites.
+ * `scale` is the brush size; `forced` is a sprite type, or -1 to choose by biome and ground.
+ * Returns how many were planted.
+ */
+function plant(kind, pts, b, r, live, scale = 1, forced = -1) {
   if (!pts.length) return 0;
   const spots = [];
-  if (kind === 'flick' && pts.length > 1) {
+  if (kind === 'row' && pts.length > 1) {
+    // Evenly spaced along the path, a little jitter either side.
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+    const total = cum[cum.length - 1];
+    const n = Math.max(2, Math.min(40, Math.round(total / (0.034 * scale)) + 1));
+    let k = 0;
+    for (let i = 0; i < n; i++) {
+      const d = (i / (n - 1)) * total;
+      while (k < cum.length - 2 && cum[k + 1] < d) k++;
+      const t = (d - cum[k]) / Math.max(1e-9, cum[k + 1] - cum[k]);
+      const p0 = pts[k];
+      const p1 = pts[k + 1];
+      spots.push({ x: p0.x + (p1.x - p0.x) * t + (r() - 0.5) * 0.012 * scale, y: p0.y + (p1.y - p0.y) * t + (r() - 0.5) * 0.012 * scale });
+    }
+  } else if (kind === 'flick' && pts.length > 1) {
     const n = 3 + Math.floor(r() * 3);
     for (let i = 0; i < n; i++) {
       const p = pts[Math.round((i / (n - 1)) * (pts.length - 1))];
@@ -443,10 +507,10 @@ function plant(kind, pts, b, r, live) {
     }
   } else {
     const c = pts[0];
-    const n = 3 + Math.floor(r() * 4);
+    const n = 3 + Math.floor(r() * 4) + (scale > 1.2 ? 3 : 0);
     // Reed beds hug the channel: tighter clusters when the tap lands in water.
     const wet = terrainContext(parchment.sample(c.x, c.y), 0, parchment.sample(c.x, c.y, 2)) === 'water';
-    const spread = wet ? 0.35 : 1;
+    const spread = (wet ? 0.35 : 1) * scale;
     spots.push({ x: c.x, y: c.y });
     for (let i = 1; i < n; i++) {
       const a = r() * Math.PI * 2;
@@ -454,6 +518,7 @@ function plant(kind, pts, b, r, live) {
       spots.push({ x: c.x + Math.cos(a) * d, y: c.y + Math.sin(a) * d });
     }
   }
+  const sizeK = scale === 1 ? 1 : Math.pow(scale, 0.45);
   let planted = 0;
   const marks = [];
   spots.forEach((s, i) => {
@@ -462,12 +527,13 @@ function plant(kind, pts, b, r, live) {
     const stone = parchment.sample(s.x, s.y, 1);
     const water = parchment.sample(s.x, s.y, 2);
     const ctx = terrainContext(h, stone, water);
-    const type = pickWeighted(b.weights[ctx], r());
+    const picked = pickWeighted(b.weights[ctx], r());
+    const type = forced >= 0 ? forced : picked;
     const ok = sprites.add({
       x: (s.x - 0.5) * PAGE_SIZE,
       z: (s.y - 0.5) * PAGE_SIZE,
       type,
-      scale: SPRITE_SIZE[type] * (0.8 + r() * 0.4),
+      scale: SPRITE_SIZE[type] * (0.8 + r() * 0.4) * sizeK,
       phase: r() * 6.283,
       spawn: elapsed + i * (live ? 0.06 : 0.01),
     });
@@ -481,6 +547,43 @@ function plant(kind, pts, b, r, live) {
   return planted;
 }
 
+/** Distance from a page point to a polyline (page UV). */
+function distToPath(p, path) {
+  if (path.length === 1) return Math.hypot(p.x - path[0].x, p.y - path[0].y);
+  let best = Infinity;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1];
+    const b = path[i];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const l2 = dx * dx + dy * dy || 1e-12;
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
+    best = Math.min(best, Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t));
+  }
+  return best;
+}
+
+/** Erase along `pts`: bare paper, no sprites, and river currents split around the gap. */
+function eraseAlong(pts, radius) {
+  const { path } = parchment.erase(pts, radius);
+  const kept = sprites.items.filter((it) => distToPath({ x: it.x / PAGE_SIZE + 0.5, y: it.z / PAGE_SIZE + 0.5 }, path) > radius);
+  if (kept.length !== sprites.count) sprites.setAll(kept);
+  const next = [];
+  for (const river of riverPaths) {
+    let run = [];
+    for (const q of river) {
+      if (distToPath(q, path) > radius * 0.9) run.push(q);
+      else {
+        if (run.length > 2) next.push(run);
+        run = [];
+      }
+    }
+    if (run.length > 2) next.push(run);
+  }
+  riverPaths = next;
+  flow.setRivers(riverPaths);
+}
+
 /**
  * Apply one log entry to the page. Live strokes also animate and make sound; replayed
  * strokes (from a shared link) are applied silently and the terrain is committed once at the end.
@@ -489,10 +592,11 @@ function plant(kind, pts, b, r, live) {
 function applyEntry(entry, live) {
   const b = BIOMES[BIOME_ORDER[entry.biome]] ?? biome;
   const r = mulberry32(entry.seed);
+  const scale = brushScale(entry.size);
   parchment.rand = r;
   switch (entry.kind) {
     case 'loop': {
-      const { area } = parchment.raiseHill(entry.points, b);
+      const { area } = parchment.raiseHill(entry.points, b, scale);
       if (live) {
         commitTerrain(true);
         synth.thud(Math.sqrt(area) * 3);
@@ -509,7 +613,7 @@ function applyEntry(entry, live) {
       return true;
     }
     case 'river': {
-      const { path } = parchment.carveRiver(entry.points, b);
+      const { path } = parchment.carveRiver(entry.points, b, scale);
       flow.addRiver(path);
       riverPaths.push(path);
       if (live) {
@@ -518,17 +622,94 @@ function applyEntry(entry, live) {
       }
       return true;
     }
+    case 'erase': {
+      eraseAlong(entry.points, 0.045 * scale);
+      if (live) {
+        commitTerrain(false);
+        synth.rustle();
+      }
+      return true;
+    }
     default:
       albedoDirty = true;
-      return plant(entry.kind, entry.points, b, r, live) > 0;
+      return plant(entry.kind, entry.points, b, r, live, scale, (entry.plant ?? 0) - 1) > 0;
   }
 }
 
-/** Apply a classified stroke to the world. Exposed for tests via window.__lp. */
-function applyStroke(result) {
-  const meta = { sprites: sprites.count, rivers: flow.riverCount, kind: result.kind, log: worldLog.length };
+/**
+ * The tool rail can force what a stroke makes. Returns the (possibly re-kinded) result, or
+ * null with a hint when the stroke can't make that thing.
+ */
+function forceKind(result, tool = opts.tool) {
+  const tap = result.kind === 'tap';
+  const pts = result.points;
+  const enclosed = () => pts.length >= 4 && parchment._area(pts) > 0.0015;
+  switch (tool) {
+    case 'hill':
+      if (result.kind === 'loop' || result.kind === 'ruin' || (!tap && enclosed())) return { ...result, kind: 'loop' };
+      toast('Draw a shape to raise a hill.');
+      return null;
+    case 'ruin': {
+      if (result.kind === 'ruin') return result;
+      if (tap || !enclosed()) {
+        toast('Draw a shape to build a ruin.');
+        return null;
+      }
+      // Straighten the outline into a few stone walls.
+      let poly = simplify([...pts, pts[0]], 0.018).slice(0, -1);
+      if (poly.length < 3) poly = simplify([...pts, pts[0]], 0.006).slice(0, -1);
+      if (poly.length < 3) {
+        toast('Draw a bigger shape to build a ruin.');
+        return null;
+      }
+      return { ...result, kind: 'ruin', polygon: poly };
+    }
+    case 'river':
+      if (tap || result.length < 0.04) {
+        toast('Drag a line to carve a river.');
+        return null;
+      }
+      return { ...result, kind: 'river' };
+    case 'plant':
+      return tap ? result : { ...result, kind: pts.length > 1 ? 'row' : 'tap' };
+    case 'erase':
+      return { ...result, kind: 'erase' };
+    default:
+      return result;
+  }
+}
+
+/** Commit one log entry as an undoable step. Returns false if it changed nothing. */
+function commitEntry(entry) {
+  const meta = { sprites: sprites.count, rivers: flow.riverCount, kind: entry.kind, log: worldLog.length };
+  if (entry.kind === 'erase') {
+    // Erasing removes sprites and splits rivers in the middle of the lists: undo restores both.
+    meta.clearedSprites = sprites.items.slice();
+    meta.clearedRivers = riverPaths.slice();
+  }
   parchment.beginStroke(); // no-op when the stroke already took its snapshot
   parchment.revertPreview();
+  if (!applyEntry(entry, true)) {
+    parchment.cancelStroke();
+    albedoDirty = true;
+    return false;
+  }
+  worldLog.push(entry);
+  parchment.commitStroke(meta);
+  onFirstStroke();
+  refreshUi();
+  scheduleAutosave();
+  return true;
+}
+
+/** Apply a classified stroke to the world. Exposed for tests via window.__lp. */
+function applyStroke(raw, { tool = opts.tool } = {}) {
+  const result = forceKind(raw, tool);
+  if (!result) {
+    parchment.cancelStroke();
+    albedoDirty = true;
+    return null;
+  }
   const source = result.kind === 'ruin' ? result.polygon : result.points;
   const entry = {
     kind: result.kind,
@@ -536,22 +717,27 @@ function applyStroke(result) {
     seed: (Math.random() * 0xffffffff) >>> 0,
     points: canonicalPoints(source, result.kind),
   };
-  if (!applyEntry(entry, true)) {
-    parchment.cancelStroke();
-    albedoDirty = true;
-    return null;
-  }
-  worldLog.push(entry);
-  parchment.commitStroke(meta);
-  onFirstStroke();
+  if (opts.size) entry.size = opts.size;
+  if (opts.plant && (result.kind === 'tap' || result.kind === 'flick' || result.kind === 'row')) entry.plant = opts.plant;
+  if (!commitEntry(entry)) return null;
+  redoStack = [];
   refreshUi();
-  scheduleAutosave();
   return result.kind;
 }
 
 function undo() {
+  const top = parchment.history.at(-1)?.meta;
+  if (!top) return;
+  // Remember what is being undone so Redo can replay it (strokes replay exactly from their seeds).
+  const item =
+    top.kind === 'clear'
+      ? { type: 'clear' }
+      : top.kind === 'batch'
+        ? { type: 'batch', entries: worldLog.slice() }
+        : worldLog[top.log]
+          ? { type: 'entry', entry: worldLog[top.log] }
+          : null;
   const meta = parchment.undo();
-  if (!meta) return;
   if (meta.clearedSprites) sprites.setAll(meta.clearedSprites);
   else sprites.truncate(meta.sprites);
   if (meta.clearedRivers) {
@@ -563,13 +749,24 @@ function undo() {
   }
   if (meta.clearedLog) worldLog = meta.clearedLog.slice();
   else worldLog.length = Math.min(worldLog.length, meta.log);
+  if (item) redoStack.push(item);
   commitTerrain(false);
   synth.rustle();
   refreshUi();
   scheduleAutosave();
 }
 
-function clearPage() {
+function redo() {
+  const item = redoStack.pop();
+  if (!item) return;
+  if (item.type === 'clear') clearPage({ keepRedo: true });
+  else if (item.type === 'batch') applyBatch(item.entries, { keepRedo: true });
+  else commitEntry(item.entry);
+  synth.rustle();
+  refreshUi();
+}
+
+function clearPage({ keepRedo = false } = {}) {
   if (sprites.count === 0 && flow.riverCount === 0 && worldLog.length === 0 && !parchment.canUndo) return;
   parchment.beginStroke();
   const meta = {
@@ -587,10 +784,109 @@ function clearPage() {
   riverPaths = [];
   worldLog = [];
   parchment.commitStroke(meta);
+  if (!keepRedo) redoStack = [];
   commitTerrain(false);
   synth.rustle(true);
   refreshUi();
   scheduleAutosave();
+}
+
+/** Replace the page with `entries` as one undoable step (Random). */
+function applyBatch(entries, { keepRedo = false } = {}) {
+  parchment.beginStroke();
+  const meta = {
+    kind: 'batch',
+    sprites: sprites.count,
+    rivers: flow.riverCount,
+    log: worldLog.length,
+    clearedSprites: sprites.items.slice(),
+    clearedRivers: riverPaths.slice(),
+    clearedLog: worldLog.slice(),
+  };
+  parchment.clear();
+  sprites.truncate(0);
+  flow.truncate(0);
+  riverPaths = [];
+  worldLog = [];
+  for (const e of entries) if (applyEntry(e, false)) worldLog.push(e);
+  parchment.commitStroke(meta);
+  if (!keepRedo) redoStack = [];
+  commitTerrain(true);
+  synth.thud(0.6);
+  onFirstStroke();
+  hint.classList.add('faded');
+  refreshUi();
+  scheduleAutosave();
+}
+
+/** A random but tidy world: a few terraced hills, a ruin, a river or two and some planting. */
+function randomEntries(seed = (Math.random() * 0xffffffff) >>> 0) {
+  const r = mulberry32(seed);
+  const bi = BIOME_ORDER.indexOf(biome.id);
+  const u32 = () => (r() * 0xffffffff) >>> 0;
+  const out = [];
+  const push = (kind, pts) => out.push({ kind, biome: bi, seed: u32(), points: canonicalPoints(pts, kind) });
+  const blob = (cx, cy, rad, n = 40) => {
+    const ph = r() * 6.283;
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const w = 1 + 0.18 * Math.sin(a * 2 + ph) + 0.1 * Math.sin(a * 3 + ph * 2);
+      pts.push({ x: cx + Math.cos(a) * rad * w, y: cy + Math.sin(a) * rad * w * 0.85 });
+    }
+    return pts;
+  };
+  const hills = [];
+  const hillCount = 2 + Math.floor(r() * 3);
+  for (let i = 0; i < hillCount; i++) {
+    const h = { x: 0.2 + r() * 0.6, y: 0.2 + r() * 0.6, r: 0.07 + r() * 0.08 };
+    hills.push(h);
+    push('loop', blob(h.x, h.y, h.r));
+    if (r() < 0.65) push('loop', blob(h.x + (r() - 0.5) * h.r * 0.4, h.y + (r() - 0.5) * h.r * 0.4, h.r * 0.5));
+  }
+  // A river across the page, meandering.
+  const rivers = 1 + (r() < 0.4 ? 1 : 0);
+  for (let k = 0; k < rivers; k++) {
+    const vertical = r() < 0.5;
+    const base = 0.25 + r() * 0.5;
+    const amp = 0.05 + r() * 0.08;
+    const ph = r() * 6.283;
+    const pts = [];
+    for (let i = 0; i <= 30; i++) {
+      const t = 0.03 + (i / 30) * 0.94;
+      const off = base + Math.sin(t * 7 + ph) * amp;
+      pts.push(vertical ? { x: off, y: t } : { x: t, y: off });
+    }
+    push('river', pts);
+  }
+  // A ruin on flat ground, if there is a spot away from the hills.
+  for (let tries = 0; tries < 12; tries++) {
+    const c = { x: 0.15 + r() * 0.7, y: 0.15 + r() * 0.7 };
+    if (hills.some((h) => Math.hypot(h.x - c.x, h.y - c.y) < h.r + 0.1)) continue;
+    const s = 0.04 + r() * 0.035;
+    const a = r() * Math.PI;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    const corners = [
+      [-1, -0.7],
+      [1, -0.7],
+      [1, 0.7],
+      [-1, 0.7],
+    ].map(([x, y]) => ({ x: c.x + (x * ca - y * sa) * s, y: c.y + (x * sa + y * ca) * s }));
+    push('ruin', corners);
+    push('tap', [c]);
+    break;
+  }
+  // Planting: on the hills and scattered.
+  for (const h of hills) push('tap', [{ x: h.x, y: h.y }]);
+  const scatter = 5 + Math.floor(r() * 5);
+  for (let i = 0; i < scatter; i++) push('tap', [{ x: 0.08 + r() * 0.84, y: 0.08 + r() * 0.84 }]);
+  return out;
+}
+
+function randomWorld(seed) {
+  applyBatch(randomEntries(seed));
+  toast('A new world. Undo brings the old one back.');
 }
 
 /** Rebuild a world from a decoded seed (shared link or autosave). Replaces the page. */
@@ -602,6 +898,7 @@ function loadWorld({ biome: biomeIndex, entries }) {
   flow.truncate(0);
   riverPaths = [];
   worldLog = [];
+  redoStack = [];
   for (const e of entries) if (applyEntry(e, false)) worldLog.push(e);
   const id = BIOME_ORDER[biomeIndex];
   if (id && id !== biome.id) setBiome(id, { quiet: true });
@@ -698,6 +995,43 @@ async function exportWorld({ download = true } = {}) {
   return buf;
 }
 
+/** Save a picture of the current view as a PNG. Resolves to the Blob. */
+async function takePhoto({ download = true } = {}) {
+  // Read the canvas in the same task as a fresh render (the drawing buffer is not preserved).
+  inkPass.render(scene, camera);
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+  if (!blob) {
+    toast('Couldn’t take a photo here.');
+    return null;
+  }
+  if (!download) return blob;
+  const name = `living-parchment-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
+  const downloads = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
+  if (downloads) {
+    try {
+      await downloads.save({ filename: name, data: blob });
+      toast('Photo saved.');
+    } catch (err) {
+      toast(err?.code === 'declined' ? 'Photo cancelled.' : 'Downloads aren’t available here.');
+    }
+    return blob;
+  }
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('Photo saved.');
+  } catch {
+    toast('This page isn’t allowed to download files here.');
+  }
+  return blob;
+}
+
 // ------------------------------------------------------------------ input
 
 const gestures = new GestureClassifier(
@@ -737,6 +1071,7 @@ const gestures = new GestureClassifier(
       synth.unlock();
     },
     isPov: () => rig.pov,
+    tool: () => opts.tool,
   },
   Gesture,
 );
@@ -748,9 +1083,16 @@ const stick = new Thumbstick(document.getElementById('stick'), rig.move);
 const foldBtn = document.getElementById('fold');
 const foldLabel = document.getElementById('fold-label');
 const helpPanel = document.getElementById('help-panel');
+const optionsPanel = document.getElementById('options');
+const optionsBtn = document.getElementById('options-btn');
+const toolButtons = [...document.querySelectorAll('.tool-btn')];
+
 function toggleFold() {
   synth.unlock();
-  rig.setFold(rig.goal.fold > 0.8 ? FOLD_DEFAULT : 1);
+  if (rig.goal.fold > 0.8) {
+    rig.setFold(FOLD_DEFAULT);
+    rig.goal.zoomK = 1;
+  } else rig.setFold(1);
 }
 function openHelp(open = true) {
   helpPanel.hidden = !open;
@@ -759,6 +1101,72 @@ function openHelp(open = true) {
     document.getElementById('help-close').focus({ preventScroll: true });
   } else document.getElementById('help').focus({ preventScroll: true });
 }
+function openOptions(open = optionsPanel.hidden) {
+  optionsPanel.hidden = !open;
+  optionsBtn.setAttribute('aria-expanded', String(open));
+  optionsBtn.setAttribute('aria-pressed', String(open));
+}
+
+const TOOL_NAMES = { auto: 'Draw', hill: 'Hill', ruin: 'Ruin', river: 'River', plant: 'Plant', erase: 'Erase', move: 'Move' };
+function setTool(id, { quiet = false } = {}) {
+  if (!TOOL_NAMES[id]) return;
+  opts.tool = id;
+  for (const b of toolButtons) b.setAttribute('aria-checked', String(b.dataset.tool === id));
+  if (!rig.pov) canvas.style.cursor = id === 'move' ? 'grab' : 'crosshair';
+  saveOptions();
+  if (!quiet) {
+    biomeLabel.textContent = TOOL_NAMES[id];
+    biomeLabel.classList.add('show');
+    clearTimeout(labelTimer);
+    labelTimer = setTimeout(() => biomeLabel.classList.remove('show'), 900);
+  }
+}
+
+/** Push the display options into the renderer, shaders and audio. */
+function applyOptions() {
+  uniforms.uContourAmt.value = opts.contours ? 1 : 0;
+  sprites.uniforms.uWind.value = opts.wind ? 1 : 0;
+  flow.points.visible = opts.water;
+  synth.muted = !opts.sound;
+  applyLook(look);
+  // Reflect state in the panel.
+  for (const g of optionsPanel.querySelectorAll('.seg[data-opt]')) {
+    for (const b of g.querySelectorAll('button')) b.setAttribute('aria-checked', String(Number(b.dataset.value) === opts[g.dataset.opt]));
+  }
+  for (const c of optionsPanel.querySelectorAll('input[type=checkbox][data-opt]')) c.checked = !!opts[c.dataset.opt];
+  document.getElementById('opt-sun-angle').value = String(opts.sunAngle);
+  document.getElementById('opt-sun-height').value = String(opts.sunHeight);
+}
+
+/** Camera buttons (view pad, Options panel) and keys share these. */
+function viewAction(name) {
+  synth.unlock();
+  switch (name) {
+    case 'turn-left':
+      rig.turn(Math.PI / 4);
+      break;
+    case 'turn-right':
+      rig.turn(-Math.PI / 4);
+      break;
+    case 'tilt-up':
+      rig.orbit(0, 0.2);
+      break;
+    case 'tilt-down':
+      rig.orbit(0, -0.2);
+      break;
+    case 'zoom-in':
+      rig.zoom(0.8);
+      break;
+    case 'zoom-out':
+      rig.zoom(1.25);
+      break;
+    case 'reset':
+      rig.resetView();
+      break;
+    default:
+      rig.view(name); // top | tilt | low
+  }
+}
 
 for (const btn of biomeButtons) {
   btn.addEventListener('click', () => {
@@ -766,15 +1174,84 @@ for (const btn of biomeButtons) {
     setBiome(btn.dataset.biome);
   });
 }
+for (const btn of toolButtons) {
+  btn.addEventListener('click', () => {
+    synth.unlock();
+    setTool(btn.dataset.tool);
+  });
+}
+for (const btn of document.querySelectorAll('[data-view]')) {
+  btn.addEventListener('click', () => viewAction(btn.dataset.view));
+}
+for (const g of optionsPanel.querySelectorAll('.seg[data-opt]')) {
+  for (const b of g.querySelectorAll('button')) {
+    b.addEventListener('click', () => {
+      opts[g.dataset.opt] = Number(b.dataset.value);
+      saveOptions();
+      applyOptions();
+    });
+  }
+}
+for (const c of optionsPanel.querySelectorAll('input[type=checkbox][data-opt]')) {
+  c.addEventListener('change', () => {
+    opts[c.dataset.opt] = c.checked;
+    if (c.dataset.opt === 'sound' && c.checked) synth.unlock();
+    saveOptions();
+    applyOptions();
+  });
+}
+for (const [id, key] of [
+  ['opt-sun-angle', 'sunAngle'],
+  ['opt-sun-height', 'sunHeight'],
+]) {
+  document.getElementById(id).addEventListener('input', (e) => {
+    opts[key] = Number(e.target.value);
+    applyLook(look);
+  });
+  document.getElementById(id).addEventListener('change', saveOptions);
+}
+document.getElementById('options-reset').addEventListener('click', () => {
+  const tool = opts.tool;
+  Object.assign(opts, DEFAULT_OPTIONS, { tool });
+  saveOptions();
+  applyOptions();
+  toast('Options back to their defaults.');
+});
+const fsBtn = document.getElementById('fullscreen');
+if (!document.fullscreenEnabled) fsBtn.hidden = true;
+fsBtn.addEventListener('click', async () => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+  } catch {
+    toast('Full screen isn’t allowed here.');
+  }
+});
+document.addEventListener('fullscreenchange', () => {
+  fsBtn.textContent = document.fullscreenElement ? 'Leave full screen' : 'Full screen';
+  setTimeout(onResize, 50);
+});
+
 undoBtn.addEventListener('click', () => {
   synth.unlock();
   undo();
+});
+redoBtn.addEventListener('click', () => {
+  synth.unlock();
+  redo();
 });
 document.getElementById('clear').addEventListener('click', () => {
   synth.unlock();
   clearPage();
 });
 foldBtn.addEventListener('click', toggleFold);
+optionsBtn.addEventListener('click', () => openOptions());
+document.getElementById('options-close').addEventListener('click', () => openOptions(false));
+document.getElementById('random').addEventListener('click', () => {
+  synth.unlock();
+  randomWorld();
+});
+document.getElementById('photo').addEventListener('click', () => takePhoto());
 document.getElementById('share').addEventListener('click', () => shareWorld());
 document.getElementById('export').addEventListener('click', () => exportWorld());
 document.getElementById('help').addEventListener('click', () => openHelp(true));
@@ -782,23 +1259,50 @@ document.getElementById('help-close').addEventListener('click', () => openHelp(f
 helpPanel.addEventListener('click', (e) => {
   if (e.target === helpPanel) openHelp(false);
 });
+
+// Held keys turn (Q/E) and tilt (R/F) smoothly; W A S D go to the thumbstick (walk or pan).
+const held = new Set();
 window.addEventListener('keydown', (e) => {
   if (!helpPanel.hidden) {
     if (e.key === 'Escape') openHelp(false);
     return;
   }
+  if (e.target?.closest?.('input, select, textarea')) return;
   const k = e.key.toLowerCase();
-  if ((e.ctrlKey || e.metaKey) && k === 'z') {
+  if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) {
+    e.preventDefault();
+    redo();
+  } else if ((e.ctrlKey || e.metaKey) && k === 'z') {
     e.preventDefault();
     undo();
+  } else if (e.ctrlKey || e.metaKey || e.altKey) {
+    return;
   } else if (e.key >= '1' && e.key <= '3') {
     setBiome(BIOME_ORDER[Number(e.key) - 1]);
+  } else if (k === 'q' || k === 'e' || k === 'r' || k === 'f') {
+    held.add(k);
+  } else if (e.key === '+' || e.key === '=') {
+    viewAction('zoom-in');
+  } else if (e.key === '-' || e.key === '_') {
+    viewAction('zoom-out');
+  } else if (e.key === '0' || e.key === 'Home') {
+    viewAction('reset');
   } else if (k === 'v') {
     toggleFold();
+  } else if (k === 'o') {
+    openOptions();
+  } else if (k === 'p') {
+    takePhoto();
   } else if (k === 'h' || e.key === '?') {
     openHelp(true);
+  } else if (e.key === 'Escape' && !optionsPanel.hidden) {
+    openOptions(false);
   }
 });
+window.addEventListener('keyup', (e) => held.delete(e.key.toLowerCase()));
+window.addEventListener('blur', () => held.clear());
+setTool(TOOL_NAMES[opts.tool] ? opts.tool : 'auto', { quiet: true });
+applyOptions();
 
 function onResize() {
   const w = window.innerWidth;
@@ -828,19 +1332,25 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(Math.max(timer.getDelta(), 0), 0.1);
   elapsed += dt;
   uniforms.uTime.value = elapsed;
+  if (held.size) {
+    const turn = (held.has('q') ? 1 : 0) - (held.has('e') ? 1 : 0);
+    const tilt = (held.has('r') ? 1 : 0) - (held.has('f') ? 1 : 0);
+    rig.orbit(turn * 1.6 * dt, tilt * 0.9 * dt);
+  }
   rig.update(dt, terrainY, isWaterAt);
   const w = povWeight(rig.fold);
   // Fog follows the camera: a soft haze past the page from above, a horizon at ground level.
   scene.fog.near = rig.distance + 6 + (7 - rig.distance - 6) * w;
   scene.fog.far = rig.distance + 34 + (30 - rig.distance - 34) * w;
-  inkPass.strength = 0.3 + 0.6 * w;
+  inkPass.strength = opts.ink ? 0.3 + 0.6 * w : 0;
   if (rig.pov !== wasPov) {
     wasPov = rig.pov;
     stick.visible = wasPov;
     foldBtn.setAttribute('aria-pressed', String(wasPov));
     foldLabel.textContent = wasPov ? 'Map' : 'Walk';
     foldBtn.title = wasPov ? 'Fly back up to the map (V)' : 'Walk on the page (V)';
-    canvas.style.cursor = wasPov ? 'grab' : 'crosshair';
+    canvas.style.cursor = wasPov || opts.tool === 'move' ? 'grab' : 'crosshair';
+    document.body.classList.toggle('pov', wasPov);
   }
   stepSpring(dt);
   stepBiome(dt);
@@ -904,7 +1414,19 @@ window.__lp = {
   project,
   applyStroke,
   undo,
+  redo,
   clearPage,
+  randomWorld,
+  randomEntries,
+  takePhoto,
+  setTool,
+  viewAction,
+  openOptions,
+  applyOptions,
+  opts,
+  get redoStack() {
+    return redoStack;
+  },
   setBiome,
   shareWorld,
   exportWorld,

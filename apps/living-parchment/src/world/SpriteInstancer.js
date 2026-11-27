@@ -320,6 +320,7 @@ uniform vec3 uCamPos;
 uniform float uBiomeRow;
 uniform float uFlip;
 uniform float uTime;
+uniform float uWind;
 vec2 lpFace() {
   vec2 d = uCamPos.xz - vec2(instanceMatrix[3].x, instanceMatrix[3].z);
   float a = atan(d.x, d.y);
@@ -351,7 +352,7 @@ vec3 transformed = vec3(position);
   float lpPop = 1.0 - exp(-6.5 * lpAge) * cos(12.0 * lpAge);
   float lpSway = lpType < 0.5 ? 0.07 : (lpType < 1.5 ? 0.13 : (lpType > 2.5 ? 0.02 : 0.0));
   float lpW = sin(uTime * 1.6 + aSprite.w) + 0.35 * sin(uTime * 3.7 + aSprite.w * 1.7);
-  transformed.x += lpW * lpSway * position.y * position.y;
+  transformed.x += lpW * lpSway * uWind * position.y * position.y;
   transformed.x *= uFlip;
   transformed *= aSprite.y * lpPop;
   transformed = lpRotY(transformed, lpFace());
@@ -387,6 +388,7 @@ export class SpriteInstancer {
       uCamPos: { value: new THREE.Vector3() },
       uBiomeRow: { value: 0 },
       uFlip: { value: 1 },
+      uWind: { value: 1 }, // wind sway strength (Options: 0 = still)
     };
 
     const geo = new THREE.PlaneGeometry(1, 1);

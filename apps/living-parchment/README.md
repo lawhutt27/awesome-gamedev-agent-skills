@@ -19,16 +19,30 @@ npm run build      # static site in dist/
 | Closed loop with 3 or more sharp corners | A stone ruin: inked foundation walls on a flat plateau. |
 | Open stroke | A river carved below the water table. The water flows the way you drew it. |
 | Tap (or a short flick) | A cluster (or a row) of paper-cutout trees, reeds, standing stones or lanterns, chosen by biome and terrain. |
-| Two fingers | Twist to orbit, drag up or down to tilt. **Pinch is the Dimensional Fold:** pinch in for a flat 15° top-down map, pinch out to sink to ground level at 65°. A second finger cancels the stroke in progress. |
+| Two fingers | Twist to orbit, drag up or down to tilt, pinch to zoom. **Zoom runs into the Dimensional Fold:** pinch out past the closest zoom to sink to ground level at 65°; pinch in past the widest zoom for a flat 15° top-down map. A second finger cancels the stroke in progress. |
 | Walking | At ground level the thumbstick (or `W` `A` `S` `D`) walks, a one-finger drag looks around, and a tap still plants. **Walk** / **Map** jumps between the two. |
-| Desktop | Right-drag or shift-drag to orbit, wheel to fold, `Ctrl/Cmd+Z` undo, `1` `2` `3` biomes, `V` walk, `H` help. |
+| Desktop camera | Right-drag or shift-drag orbits (all the way round) and tilts (from nearly edge-on to straight down), middle-drag or Alt-drag pans, the wheel zooms. Keys: `Q` `E` turn, `R` `F` tilt, `+` `-` zoom, `W` `A` `S` `D` pan, `0` reset. A camera pad in the bottom-left corner has the same moves on wide screens. |
+| Other keys | `Ctrl/Cmd+Z` undo, `Ctrl/Cmd+Shift+Z` or `Ctrl+Y` redo, `1` `2` `3` biomes, `V` walk, `O` options, `P` photo, `H` help. |
+
+The **tool rail** on the left can override the shape grammar: **Draw** (the shape decides),
+**Hill**, **Ruin** and **River** (any stroke makes that), **Plant** (tap a cluster or drag a row),
+**Erase** (rub the page back to bare paper, removing planting and splitting rivers) and **Move**
+(one-finger drag orbits, right-drag pans).
+
+**Options** holds brush size (Fine / Normal / Bold: terrace height, river width, planting and
+eraser size), what to plant (by biome, or always trees, reeds, stones or lanterns), camera presets
+(top-down, tilted, low angle, turn, zoom, reset), the sun's direction and height, switches for ink
+outlines, contour lines, wind, flowing water and sound, and full screen. Options are remembered
+in the browser; brush size and planting are stored with each stroke so shared links rebuild them.
 
 The bottom bar switches between the **Moss**, **Autumn** and **Moon** biomes (Mossy Ruin,
 Autumn Ridge, Moonlit Tide: light, water ink, contour ink and sprite art all change), **Undo**
-steps back up to 10 strokes and **Clear** wipes the page (also undoable). On the right, **Help**
-opens the how-to-play panel (also shown on the first visit), **Share** saves the whole world into
-the page link, and **.glb** downloads the diorama as a 3D model. The world also autosaves in the
-browser.
+steps back up to 10 strokes, **Redo** replays them (strokes carry their own seeds, so a redo is
+exact) and **Clear** wipes the page (also undoable). On the right, **Help** opens the how-to-play
+panel (also shown on the first visit), **Options** opens the options card, **Random** draws a
+whole new world as one undoable step, **Photo** saves a PNG of the view, **Share** saves the whole
+world into the page link, and **.glb** downloads the diorama as a 3D model. The world also
+autosaves in the browser.
 
 ## How it works
 
@@ -84,7 +98,8 @@ src/
   get a side-projected (triplanar on X/Z) strata-and-hatching texture instead of a smear. This
   covers what `three-projected-material` was suggested for without adding the dependency.
 - **World links.** Every committed stroke is logged with its points (simplified and quantized
-  before it is applied) and its own random seed, so replaying the log rebuilds the same world.
+  before it is applied), its own random seed and any brush-size or planting choice (packed into
+  spare bits, so older links still decode), so replaying the log rebuilds the same world.
   The log is packed to bytes, deflated and base32-encoded into `#w1…`, which is a plain hash and
   works inside the claude.ai artifact viewer too.
 - **.glb export.** GPU-only effects are baked on the CPU: displaced terrain with water painted
@@ -97,8 +112,8 @@ src/
 ## Tests
 
 ```bash
-npm test           # unit tests: stroke geometry, $1 recognizer, classifier, camera rig, thumbstick,
-                   # world codec, zip writer, biomes, audio maths
+npm test           # unit tests: stroke geometry, $1 recognizer, classifier, camera rig (zoom chain,
+                   # pan, presets), thumbstick, world codec, zip writer, biomes, audio maths
 npm run test:e2e   # builds, serves dist/ and drives the app in headless Chromium
 ```
 
@@ -107,7 +122,10 @@ checks the composed height and mask data, sprite and particle counts, undo (incl
 limit and undoing Clear), biome switching, orbit and wheel zoom, touch pinch cancelling a stroke,
 the portrait phone layout, audio unlock, WebGL context loss and steady-state memory, plus the
 English labels and help panel, folding to ground level, walking, looking and planting there,
-.glb export (parsed back), share links that rebuild an identical world, and autosave. Screenshots
+.glb export (parsed back), share links that rebuild an identical world, and autosave; and every
+tool, erase with undo and redo, brush sizes, planting choices, Random, Photo, the Options switches
+(applied live and remembered), the free camera (Move tool, panning, full orbit, tilt range, zoom
+chain, keys, presets) and the phone layout of the rails and Options sheet. Screenshots
 go to `test-results/`. It uses the `playwright` package and needs a Chromium it can launch.
 
 ## Notes

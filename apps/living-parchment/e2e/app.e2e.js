@@ -242,7 +242,7 @@ describe('desktop', () => {
     assert.equal((await state(page)).biome, 'autumnRidge');
   });
 
-  test('right-drag orbits and tilts, wheel zooms, neither draws', async () => {
+  test('right-drag orbits and tilts, wheel zooms (dolly first), neither draws', async () => {
     const g0 = await page.evaluate(() => ({ ...window.__lp.rig.goal }));
     const h0 = (await state(page)).history.length;
     await stroke(
@@ -259,14 +259,14 @@ describe('desktop', () => {
     assert.notEqual(g1.pitch, g0.pitch);
     await page.mouse.move(360, 270);
     await page.mouse.wheel(0, 400);
-    await page.waitForFunction((f) => window.__lp.rig.goal.fold < f, g1.fold);
+    await page.waitForFunction((k) => window.__lp.rig.goal.zoomK > k, g1.zoomK);
     assert.equal((await state(page)).history.length, h0);
     await page.waitForTimeout(800);
     await page.screenshot({ path: path.join(SHOTS, 'desktop-3-orbit.png') });
   });
 
   test('strokes that start off the page do nothing', async () => {
-    await page.evaluate(() => Object.assign(window.__lp.rig.goal, { yaw: 0, pitch: 1.05, fold: 0.4 }));
+    await page.evaluate(() => Object.assign(window.__lp.rig.goal, { yaw: 0, pitch: 1.05, fold: 0.4, zoomK: 1 }));
     await page.waitForTimeout(800);
     const h0 = (await state(page)).history.length;
     await stroke(page, [

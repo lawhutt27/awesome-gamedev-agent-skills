@@ -8,6 +8,11 @@
 // The field of view widens linearly with the fold while the camera rig lowers onto the
 // walker's position over the last part of the range, so the flat ink map turns into a
 // walkable diorama in one continuous gesture.
+//
+// On the map, zoom is one chain: zooming in first dollies closer (zoomK), then folds down to
+// walk; zooming out folds back up to the tabletop, dollies away, then flattens to the map.
+// The map can also be orbited all the way round, tilted from nearly edge-on to straight down,
+// and panned across the table.
 
 export const FOV_MIN = 15;
 export const FOV_MAX = 65;
@@ -17,6 +22,9 @@ export const EYE_HEIGHT = 0.34; // world units above the terrain (trees are ~1.5
 export const WALK_SPEED = 1.5; // world units per second
 export const PAGE_LIMIT = 4.75; // walker stays inside the sheet
 export const SPAWN_BACK = 3.9; // how far toward the viewer the walk starts
+export const PAN_LIMIT = 6; // how far the map view can slide off-centre
+export const FOLD_RATE = 0.55; // fold units per unit of ln(zoom)
+export const VIEW_PRESETS = { top: 1.56, tilt: 1.05, low: 0.2 };
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const smooth = (a, b, x) => {
@@ -49,7 +57,11 @@ export class CameraRig {
     this.zoomK = 1; // extra map-view dolly multiplier
     this.fold = fold;
     this.goal = { yaw, pitch, fold, zoomK: 1 };
-    this.limits = { pitchMin: 0.32, pitchMax: 1.5, zoomMin: 0.55, zoomMax: 1.6 };
+    this.limits = { pitchMin: 0.1, pitchMax: 1.56, zoomMin: 0.35, zoomMax: 1.9 };
+    this.baseZ = 0.55; // framing offset for the screen shape (see fit)
+    this.pan = { x: 0, z: 0 };
+    this.goal.panX = 0;
+    this.goal.panZ = 0;
     this.target = { x: 0, y: 0, z: 0.55 };
     this.walker = { x: 0, z: 0.55, y: 0, yaw, pitch: -0.08, goalYaw: yaw, goalPitch: -0.08, bob: 0 };
     this.move = { x: 0, y: 0 }; // walking input, x = strafe right, y = forward (-1..1)
@@ -68,10 +80,78 @@ export class CameraRig {
     this.goal.fold = clamp(f, 0, 1);
   }
 
-  /** Pinch / wheel: factor > 1 means "further away" (fold toward the map). */
+  /**
+   * Pinch / wheel: factor > 1 means "further away". Runs along one chain:
+   * flat map <-> dolly out <-> tabletop <-> dolly in <-> walk.
+   */
   zoom(factor) {
     if (!(factor > 0)) return;
-    this.goal.fold = clamp(this.goal.fold - Math.log(factor) * 0.55, 0, 1);
+    const g = this.goal;
+    const L = this.limits;
+    let a = -Math.log(factor);
+    const take = (need) => {
+      const used = Math.min(Math.abs(a), Math.max(0, need));
+      a -= Math.sign(a) * used;
+      return used;
+    };
+    if (a > 0) {
+      if (g.fold < FOLD_DEFAULT) g.fold += take((FOLD_DEFAULT - g.fold) / FOLD_RATE) * FOLD_RATE;
+      if (a > 0 && g.fold <= FOLD_DEFAULT + 1e-9) {
+        g.zoomK = Math.max(L.zoomMin, g.zoomK / Math.exp(take(Math.log(g.zoomK / L.zoomMin))));
+        if (a > 0) g.zoomK = L.zoomMin;
+      }
+      if (a > 0) g.fold = clamp(g.fold + a * FOLD_RATE, 0, 1);
+    } else if (a < 0) {
+      if (g.fold > FOLD_DEFAULT) g.fold -= take((g.fold - FOLD_DEFAULT) / FOLD_RATE) * FOLD_RATE;
+      if (a < 0) {
+        g.zoomK = Math.min(L.zoomMax, g.zoomK * Math.exp(take(Math.log(L.zoomMax / g.zoomK))));
+        if (a < 0) g.zoomK = L.zoomMax;
+      }
+      if (a < 0) g.fold = clamp(g.fold + a * FOLD_RATE, 0, 1);
+    }
+  }
+
+  /** Drag the map across the table by a screen-space delta in CSS pixels. */
+  panBy(dxPx, dyPx) {
+    if (this.pov) return;
+    const k = Math.max(this.distance, 2) * 0.0011;
+    const b = this.basis(this.yaw);
+    this.panWorld(-dxPx * k, dyPx * k, b);
+  }
+
+  /** Move the map view: `right` and `forward` in world units relative to the view direction. */
+  panWorld(right, forward, b = this.basis(this.yaw)) {
+    const g = this.goal;
+    g.panX = clamp(g.panX + b.rx * right + b.fx * forward, -PAN_LIMIT, PAN_LIMIT);
+    g.panZ = clamp(g.panZ + b.rz * right + b.fz * forward, -PAN_LIMIT, PAN_LIMIT);
+  }
+
+  /** Spin the map (or turn the walker) by `d` radians. */
+  turn(d) {
+    this.orbit(d, 0);
+  }
+
+  /** Jump to a named tilt: 'top', 'tilt' or 'low'. Leaves walking first if needed. */
+  view(name) {
+    const p = VIEW_PRESETS[name];
+    if (p === undefined) return;
+    if (this.goal.fold > POV_START) this.goal.fold = FOLD_DEFAULT;
+    if (this.goal.fold < FOLD_DEFAULT) this.goal.fold = FOLD_DEFAULT;
+    this.goal.pitch = clamp(p, this.limits.pitchMin, this.limits.pitchMax);
+  }
+
+  /** Back to the starting tabletop view: centred, unrotated, default tilt and zoom. */
+  resetView() {
+    const g = this.goal;
+    g.fold = FOLD_DEFAULT;
+    g.pitch = 1.05;
+    g.zoomK = 1;
+    g.panX = 0;
+    g.panZ = 0;
+    // Take the short way round to yaw 0.
+    g.yaw -= Math.round(g.yaw / (Math.PI * 2)) * Math.PI * 2;
+    this.yaw -= Math.round(this.yaw / (Math.PI * 2)) * Math.PI * 2;
+    g.yaw = 0;
   }
 
   orbit(dYaw, dPitch) {
@@ -91,7 +171,7 @@ export class CameraRig {
 
   fit(aspect) {
     this.aspect = aspect;
-    this.target.z = aspect < 1 ? 0.3 : 0.55;
+    this.baseZ = aspect < 1 ? 0.3 : 0.55;
   }
 
   /** Forward / right unit vectors on the ground for the current walker yaw. */
@@ -109,6 +189,10 @@ export class CameraRig {
     this.yaw += (g.yaw - this.yaw) * k;
     this.pitch += (g.pitch - this.pitch) * k;
     this.zoomK += (g.zoomK - this.zoomK) * k;
+    this.pan.x += (g.panX - this.pan.x) * k;
+    this.pan.z += (g.panZ - this.pan.z) * k;
+    this.target.x = this.pan.x;
+    this.target.z = this.baseZ + this.pan.z;
     this.fold += (g.fold - this.fold) * (1 - Math.exp(-dt * 6));
     if (Math.abs(g.fold - this.fold) < 1e-4) this.fold = g.fold;
 
@@ -116,11 +200,17 @@ export class CameraRig {
     const wk = this.walker;
 
     if (w === 0) {
-      // Not yet descending: the walker waits at the near edge of the page, facing in the same
-      // direction as the map camera, so stepping down shows the whole diorama ahead.
+      // On the map, W A S D / arrows slide the view across the table.
+      const mx = clamp(this.move.x, -1, 1);
+      const my = clamp(this.move.y, -1, 1);
+      if (Math.abs(mx) + Math.abs(my) > 0.01) this.panWorld(mx * 3.2 * this.zoomK * dt, my * 3.2 * this.zoomK * dt);
+      // Not yet descending: the walker waits toward the near edge of the page, facing in the
+      // same direction as the map camera, so stepping down shows the diorama ahead. Zoomed in,
+      // it waits closer to what you were looking at.
       const b0 = this.basis(this.yaw);
-      wk.x = clamp(this.target.x - b0.fx * SPAWN_BACK, -PAGE_LIMIT, PAGE_LIMIT);
-      wk.z = clamp(this.target.z - b0.fz * SPAWN_BACK, -PAGE_LIMIT, PAGE_LIMIT);
+      const back = SPAWN_BACK * Math.min(1, this.zoomK);
+      wk.x = clamp(this.target.x - b0.fx * back, -PAGE_LIMIT, PAGE_LIMIT);
+      wk.z = clamp(this.target.z - b0.fz * back, -PAGE_LIMIT, PAGE_LIMIT);
       wk.yaw = wk.goalYaw = this.yaw;
       wk.pitch = wk.goalPitch = -0.08;
     } else {

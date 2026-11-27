@@ -48,7 +48,8 @@ export class Thumbstick {
     const KEYS = { w: 'f', arrowup: 'f', s: 'b', arrowdown: 'b', a: 'l', arrowleft: 'l', d: 'r', arrowright: 'r' };
     window.addEventListener('keydown', (e) => {
       const k = KEYS[e.key.toLowerCase()];
-      if (!k || e.ctrlKey || e.metaKey) return;
+      if (!k || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target?.closest?.('input, select, textarea')) return; // sliders own their arrow keys
       this.keys.add(k);
       this._combine();
     });

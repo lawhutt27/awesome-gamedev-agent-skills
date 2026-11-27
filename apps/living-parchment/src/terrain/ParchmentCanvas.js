@@ -343,8 +343,11 @@ export class ParchmentCanvas {
 
   // ------------------------------------------------------------------ world strokes
 
-  /** Closed loop: raise a terraced hill. Loops inside hills stack (additive height). */
-  raiseHill(points, biome) {
+  /**
+   * Closed loop: raise a terraced hill. Loops inside hills stack (additive height).
+   * `scale` is the brush size: lower or taller terraces.
+   */
+  raiseHill(points, biome, scale = 1) {
     const ring = smoothPath(points, 2, true);
     // Simplex micro-variation along the rim so terraces look sculpted, not lathe-turned.
     const seed = this.rand() * 100;
@@ -352,7 +355,7 @@ export class ParchmentCanvas {
     sculpted.pop();
     const H = this.H;
     const hp = this._path(sculpted, H, true);
-    const step = 34; // ~0.13 of the 0..1 height range per terrace
+    const step = Math.round(34 * scale); // ~0.13 of the 0..1 height range per terrace at scale 1
     this._soft(this.height, hp, { color: `rgb(${step},${step},${step})`, blur: H * 0.028, op: 'lighter' });
     this._soft(this.mask, hp, { color: 'rgb(255,0,0)', blur: H * 0.01, op: 'lighter' });
 
@@ -506,23 +509,24 @@ export class ParchmentCanvas {
     a.restore();
   }
 
-  /** Open stroke: carve a river channel, paint banks and record flow direction. */
-  carveRiver(points, biome) {
+  /** Open stroke: carve a river channel, paint banks and record flow direction. `scale` = width. */
+  carveRiver(points, biome, scale = 1) {
     const path = smoothPath(points, 2, false);
     const H = this.H;
     const S = this.A;
+    const w = scale;
     const hp = this._path(path, H, false);
     // Banks (0.40) then a deeper core (0.29). source-over carves through hills as a gorge.
-    this._soft(this.height, hp, { color: 'rgb(102,102,102)', blur: H * 0.012, stroke: H * 0.034 });
-    this._soft(this.height, hp, { color: 'rgb(74,74,74)', blur: H * 0.008, stroke: H * 0.016 });
-    this._soft(this.mask, hp, { color: 'rgb(0,0,255)', blur: H * 0.008, stroke: H * 0.03, op: 'lighter' });
+    this._soft(this.height, hp, { color: 'rgb(102,102,102)', blur: H * 0.012, stroke: H * 0.034 * w });
+    this._soft(this.height, hp, { color: 'rgb(74,74,74)', blur: H * 0.008, stroke: H * 0.016 * w });
+    this._soft(this.mask, hp, { color: 'rgb(0,0,255)', blur: H * 0.008, stroke: H * 0.03 * w, op: 'lighter' });
 
     // Flow direction (RG) along the path.
     const f = this.flow;
     const F = this.F;
     f.save();
     f.lineCap = 'round';
-    f.lineWidth = F * 0.05;
+    f.lineWidth = F * 0.05 * w;
     for (let i = 1; i < path.length; i++) {
       const p0 = path[i - 1];
       const p1 = path[i];
@@ -548,17 +552,17 @@ export class ParchmentCanvas {
     a.lineCap = 'round';
     a.lineJoin = 'round';
     a.strokeStyle = rgba(biome.bankWash, 0.3);
-    a.lineWidth = S * 0.06;
+    a.lineWidth = S * 0.06 * w;
     a.stroke(ap);
     a.strokeStyle = rgba(biome.waterInk, 0.42);
-    a.lineWidth = S * 0.032;
+    a.lineWidth = S * 0.032 * w;
     a.stroke(ap);
     a.strokeStyle = rgba(biome.waterDeep, 0.25);
-    a.lineWidth = S * 0.012;
+    a.lineWidth = S * 0.012 * w;
     a.stroke(ap);
     a.restore();
 
-    const half = (t) => 0.0165 * (0.85 + 0.3 * t);
+    const half = (t) => 0.0165 * w * (0.85 + 0.3 * t);
     this._ink(this._offset(path, half), { color: biome.ink, width: 2.1 });
     this._ink(this._offset(path, (t) => -half(t)), { color: biome.ink, width: 2.1 });
     // Little current marks.
@@ -572,6 +576,34 @@ export class ParchmentCanvas {
       });
     }
     return { path };
+  }
+
+  /**
+   * Eraser: rub the page back to bare paper along a stroke (or a dot for a tap): height to paper
+   * level, masks and flow cleared, and the clean parchment restored under a soft edge.
+   * `radius` is in page UV.
+   */
+  erase(points, radius = 0.05) {
+    const H = this.H;
+    const S = this.A;
+    const F = this.F;
+    const pts = points.length > 1 ? smoothPath(points, 2, false) : [points[0], { x: points[0].x + 1e-4, y: points[0].y }];
+    const hp = this._path(pts, H, false);
+    const width = radius * 2;
+    this._soft(this.height, hp, { color: `rgb(${HEIGHT_BASE},${HEIGHT_BASE},${HEIGHT_BASE})`, blur: H * 0.01, stroke: H * width });
+    this._soft(this.mask, hp, { color: '#000', blur: H * 0.006, stroke: H * width });
+    this._soft(this.flow, this._path(pts, F, false), { color: 'rgb(128,128,0)', blur: F * 0.006, stroke: F * width });
+    // Paper: a soft-edged brush shape on a scratch canvas, filled with the clean parchment.
+    if (!this._scratch) this._scratch = makeCanvas(S);
+    const { ctx: t } = this._scratch;
+    t.globalCompositeOperation = 'source-over';
+    t.clearRect(0, 0, S, S);
+    this._soft(t, this._path(pts, S, false), { color: '#000', blur: S * 0.012, stroke: S * width * 0.92 });
+    t.globalCompositeOperation = 'source-in';
+    t.drawImage(this.paperBase, 0, 0);
+    t.globalCompositeOperation = 'source-over';
+    this.albedo.drawImage(this._scratch.canvas, 0, 0);
+    return { path: pts };
   }
 
   /** Small ink grass tufts / ground marks under planted sprites. */

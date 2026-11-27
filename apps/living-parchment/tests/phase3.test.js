@@ -12,6 +12,8 @@ import {
   EYE_HEIGHT,
   PAGE_LIMIT,
   SPAWN_BACK,
+  PAN_LIMIT,
+  VIEW_PRESETS,
 } from '../src/input/CameraRig.js';
 import { stickVector } from '../src/input/Thumbstick.js';
 import {
@@ -73,9 +75,13 @@ test('pinch out walks the camera down to eye height on the terrain', () => {
   assert.ok(rig.pov);
   assert.ok(Math.abs(cam.fov - FOV_MAX) < 0.1);
   assert.ok(Math.abs(cam.position.y - (0.4 + EYE_HEIGHT)) < 0.02, `eye at ${cam.position.y}`);
-  rig.zoom(10); // pinch in: back to the map
+  rig.zoom(10); // pinch in: back up to the tabletop, then dolly out
+  assert.ok(Math.abs(rig.goal.fold - FOLD_DEFAULT) < 1e-9);
+  assert.ok(rig.goal.zoomK > 1);
+  rig.zoom(10); // keep going: flatten to the top-down map
   run(rig, 3, ground);
   assert.equal(rig.goal.fold, 0);
+  assert.equal(rig.goal.zoomK, rig.limits.zoomMax);
   assert.ok(Math.abs(cam.fov - FOV_MIN) < 0.1);
   assert.ok(cam.position.y > high, 'top-down map is higher still');
 });
@@ -126,6 +132,61 @@ test('map orbit clamps tilt; the walker waits at the near edge facing the same w
   assert.ok(Math.abs(rig.walker.x - rig.target.x) < 1e-3);
   assert.equal(rig.walker.z, Math.min(rig.target.z + SPAWN_BACK, PAGE_LIMIT)); // yaw 0 looks toward -Z
   assert.ok(Math.abs(rig.walker.yaw - rig.yaw) < 1e-9);
+});
+
+test('zoom is one chain: dolly in, then walk; dolly out, then flatten', () => {
+  const rig = new CameraRig(fakeCamera());
+  rig.zoom(Math.exp(-0.5)); // a little closer: dolly only
+  assert.equal(rig.goal.fold, FOLD_DEFAULT);
+  assert.ok(Math.abs(rig.goal.zoomK - Math.exp(-0.5)) < 1e-9);
+  rig.zoom(Math.exp(-5)); // all the way in: hits the dolly limit, then folds down to walk
+  assert.equal(rig.goal.zoomK, rig.limits.zoomMin);
+  assert.equal(rig.goal.fold, 1);
+  rig.zoom(Math.exp(0.1)); // a little out from walking only lifts the fold
+  assert.ok(rig.goal.fold < 1 && rig.goal.fold > FOLD_DEFAULT);
+  assert.equal(rig.goal.zoomK, rig.limits.zoomMin);
+});
+
+test('map pans across the table, relative to the view, within limits', () => {
+  const cam = fakeCamera();
+  const rig = new CameraRig(cam);
+  run(rig, 0.2);
+  const z0 = rig.target.z;
+  rig.panWorld(0, 1); // forward at yaw 0 is -Z
+  run(rig, 2);
+  assert.ok(Math.abs(rig.target.z - (z0 - 1)) < 1e-3, `target z ${rig.target.z}`);
+  rig.goal.yaw = Math.PI / 2;
+  run(rig, 2);
+  rig.panWorld(1, 0); // right at yaw 90° is -Z as well
+  run(rig, 2);
+  assert.ok(Math.abs(rig.target.z - (z0 - 2)) < 1e-2, `target z ${rig.target.z}`);
+  rig.panWorld(100, 100);
+  assert.ok(Math.abs(rig.goal.panX) <= PAN_LIMIT && Math.abs(rig.goal.panZ) <= PAN_LIMIT);
+  // keys pan on the map
+  rig.resetView();
+  run(rig, 3);
+  rig.move.y = 1;
+  run(rig, 0.5);
+  assert.ok(rig.target.z < z0 - 0.5, 'W slides the map view forward');
+  rig.move.y = 0;
+});
+
+test('tilt reaches nearly edge-on and straight down; presets and reset', () => {
+  const rig = new CameraRig(fakeCamera());
+  rig.orbit(0, -10);
+  assert.ok(rig.goal.pitch <= 0.12);
+  rig.orbit(0, 10);
+  assert.ok(rig.goal.pitch >= 1.55);
+  rig.view('low');
+  assert.equal(rig.goal.pitch, VIEW_PRESETS.low);
+  rig.goal.fold = 1;
+  rig.view('top'); // leaves walking first
+  assert.equal(rig.goal.fold, FOLD_DEFAULT);
+  assert.equal(rig.goal.pitch, VIEW_PRESETS.top);
+  rig.goal.yaw = Math.PI * 4 + 0.3;
+  rig.goal.zoomK = 0.5;
+  rig.resetView();
+  assert.deepEqual([rig.goal.yaw, rig.goal.pitch, rig.goal.zoomK, rig.goal.panX, rig.goal.panZ], [0, 1.05, 1, 0, 0]);
 });
 
 test('thumbstick vector: dead zone, unit clamp, screen-up is forward', () => {

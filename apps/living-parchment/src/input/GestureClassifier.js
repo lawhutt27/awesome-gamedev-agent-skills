@@ -371,7 +371,9 @@ export function classifyStroke(stroke, opts = {}) {
  *  - one finger / left mouse: draw a stroke (classified on release); at ground level it
  *    looks around instead, and a tap still plants
  *  - two fingers: pinch = Dimensional Fold (map <-> ground), twist = orbit, drag up/down = tilt
- *  - right / middle mouse or shift-drag: orbit + tilt; wheel: zoom
+ *  - right mouse or shift-drag: orbit + tilt; middle mouse or alt-drag: pan; wheel: zoom
+ *  - with the Move tool (handlers.tool() === 'move') one finger / left mouse orbits instead of
+ *    drawing, and right-drag pans
  *
  * `project(clientX, clientY)` must return {x, y} in parchment UV or null when off the page.
  * Handlers: onStart(uv, screen), onMove(uv, screen, velocityPxPerMs), onEnd(classification),
@@ -386,7 +388,7 @@ export class GestureClassifier {
     this.opts = opts;
     this.stroke = null;
     this.pinching = false;
-    this.mode = null; // 'draw' | 'orbit' | null
+    this.mode = null; // 'draw' | 'orbit' | 'pan' | 'look' | null
 
     element.addEventListener('contextmenu', (e) => e.preventDefault());
     // iOS Safari fires its own pinch events; block them so the page never zooms.
@@ -417,11 +419,17 @@ export class GestureClassifier {
   _onDrag(s) {
     const e = s.event;
     if (s.first) {
-      const orbitButton = e && (e.buttons & 2 || e.buttons & 4 || e.shiftKey);
+      const buttons = e?.buttons ?? 1;
+      const orbitButton = !!e && (buttons & 2 || e.shiftKey);
+      const panButton = !!e && (buttons & 4 || (e.altKey && buttons & 1));
       const pov = this.h.isPov?.() ?? false;
+      const move = (this.h.tool?.() ?? 'draw') === 'move';
       if (this.pinching || s.touches > 1) this.mode = null;
-      else if (orbitButton) this.mode = 'orbit';
-      else this.mode = pov ? 'look' : 'draw';
+      else if (pov) this.mode = orbitButton || panButton ? 'orbit' : 'look';
+      else if (panButton) this.mode = 'pan';
+      else if (orbitButton) this.mode = move ? 'pan' : 'orbit';
+      else this.mode = move ? 'orbit' : 'draw';
+      if (this.mode === 'pan') this.h.onCameraGesture?.();
       if (this.mode === 'draw') this._begin(s);
       if (this.mode === 'look') {
         this.look = { x: s.xy[0], y: s.xy[1], t0: s.timeStamp, dist: 0 };
@@ -457,6 +465,12 @@ export class GestureClassifier {
     if (this.mode === 'orbit') {
       const [dx, dy] = s.delta;
       this.rig.orbit(-dx * 0.006, dy * 0.005);
+      if (s.last) this.mode = null;
+      return;
+    }
+    if (this.mode === 'pan') {
+      const [dx, dy] = s.delta;
+      this.rig.panBy(dx, dy);
       if (s.last) this.mode = null;
       return;
     }

@@ -70,6 +70,7 @@ export function createSharedUniforms({ heightFrom, heightTo, noise, albedo, flow
     uSky: { value: new THREE.Color('#e8efd8') },
     uGrain: { value: 0.22 },
     uCliffInk: { value: null },
+    uContourAmt: { value: 1 }, // 0 hides the contour lines (Options)
   };
 }
 
@@ -175,6 +176,7 @@ uniform vec3 uContour;
 uniform vec3 uSky;
 uniform float uGrain;
 uniform sampler2D uCliffInk;
+uniform float uContourAmt;
 varying float vH;
 varying vec2 vTUv;
 varying vec3 vWN;
@@ -201,7 +203,7 @@ float lpBands;`,
   float majorFw = max(fwidth(majorC), 1e-4);
   float major = 1.0 - clamp(abs(fract(majorC) - 0.5) / majorFw - 0.6, 0.0, 1.0);
   float aboveSea = smoothstep(0.515, 0.545, h);
-  diffuseColor.rgb = mix(diffuseColor.rgb, uContour, clamp(line * 0.3 + major * 0.45, 0.0, 0.7) * aboveSea);
+  diffuseColor.rgb = mix(diffuseColor.rgb, uContour, clamp(line * 0.3 + major * 0.45, 0.0, 0.7) * aboveSea * uContourAmt);
 
   // Projected cliff ink: the page is painted from above, so steep terrace and ruin walls
   // would smear it. Side-project hand-drawn strata and hatching onto them instead

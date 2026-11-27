@@ -35,9 +35,16 @@ describe('ui', () => {
   test('buttons are labelled in English', async () => {
     const { page, context } = await openApp(browser, url);
     const labels = await page.evaluate(() =>
-      [...document.querySelectorAll('#toolbar button, #sidebar button')].map((b) => b.textContent.trim()),
+      [...document.querySelectorAll('#tools button, #toolbar button, #sidebar button')].map((b) => b.textContent.trim()),
     );
-    assert.deepEqual(labels, ['Help', 'Walk', 'Share', '.glb', 'Moss', 'Autumn', 'Moon', 'Undo', 'Clear']);
+    assert.deepEqual(labels, [
+      'Draw', 'Hill', 'Ruin', 'River', 'Plant', 'Erase', 'Move',
+      'Help', 'Options', 'Walk', 'Random', 'Photo', 'Share', '.glb',
+      'Moss', 'Autumn', 'Moon', 'Undo', 'Redo', 'Clear',
+    ]);
+    // icon-only camera buttons still have English names
+    const pad = await page.evaluate(() => [...document.querySelectorAll('#viewpad button')].map((b) => b.getAttribute('aria-label') || b.textContent.trim()));
+    assert.deepEqual(pad, ['Turn left', 'Tilt up', 'Turn right', 'Zoom out', 'Tilt down', 'Zoom in', 'Reset view']);
     await context.close();
   });
 

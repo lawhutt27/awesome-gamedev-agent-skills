@@ -74,18 +74,18 @@ export async function uvToScreen(page, pts) {
 }
 
 /** Dispatch a full stroke (screen px points) as pointer events on the canvas. */
-export async function stroke(page, screenPts, { pointerType = 'mouse', buttons = 1, shiftKey = false } = {}) {
+export async function stroke(page, screenPts, { pointerType = 'mouse', buttons = 1, shiftKey = false, altKey = false } = {}) {
   await page.evaluate(
-    ({ pts, pointerType, buttons, shiftKey }) => {
+    ({ pts, pointerType, buttons, shiftKey, altKey }) => {
       const el = document.getElementById('scene');
-      const base = { bubbles: true, cancelable: true, composed: true, pointerId: 1, pointerType, isPrimary: true, shiftKey };
+      const base = { bubbles: true, cancelable: true, composed: true, pointerId: 1, pointerType, isPrimary: true, shiftKey, altKey };
       const ev = (type, [x, y], b) =>
         el.dispatchEvent(new PointerEvent(type, { ...base, clientX: x, clientY: y, buttons: b, button: type === 'pointermove' ? -1 : 0, pressure: b ? 0.5 : 0 }));
       ev('pointerdown', pts[0], buttons);
       for (let i = 1; i < pts.length; i++) ev('pointermove', pts[i], buttons);
       ev('pointerup', pts[pts.length - 1], 0);
     },
-    { pts: screenPts, pointerType, buttons, shiftKey },
+    { pts: screenPts, pointerType, buttons, shiftKey, altKey },
   );
 }
 

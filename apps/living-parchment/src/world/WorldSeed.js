@@ -1,14 +1,23 @@
 // Worlds as a replayable stroke log, packed into a short URL-safe "seed".
 //
-// Every committed stroke is stored as {kind, biome, seed, points}. Points are quantized to a
-// 4096 grid and simplified *before* the stroke is applied, and every random choice the stroke
-// makes is drawn from its own seeded generator, so replaying the log rebuilds the same page.
+// Every committed stroke is stored as {kind, biome, seed, points} plus two optional choices,
+// `size` (brush size code, see BRUSH_SIZES) and `plant` (0 = by biome, else sprite type + 1).
+// Points are quantized to a 4096 grid and simplified *before* the stroke is applied, and every
+// random choice the stroke makes is drawn from its own seeded generator, so replaying the log
+// rebuilds the same page.
 //
 // Wire format (then optionally deflated, then base32 so it fits in a plain #hash):
 //   u8 'L' | u8 version | u8 current biome | u16 entry count
-//   per entry: u8 kind | u8 biome | u32 seed | u16 n | n * (u16 x, u16 y)
+//   per entry: u8 (kind | size << 4) | u8 (biome | plant << 4) | u32 seed | u16 n | n * (u16 x, u16 y)
+// The high nibbles were always zero in earlier links, which therefore still decode the same.
 
-export const KINDS = ['loop', 'ruin', 'river', 'tap', 'flick'];
+export const KINDS = ['loop', 'ruin', 'river', 'tap', 'flick', 'erase', 'row'];
+/** Brush size codes as stored (0 keeps old links at the original size). */
+export const BRUSH_SIZES = [
+  { id: 'normal', label: 'Normal', scale: 1 },
+  { id: 'fine', label: 'Fine', scale: 0.6 },
+  { id: 'bold', label: 'Bold', scale: 1.6 },
+];
 export const SEED_VERSION = 1;
 const Q = 4095;
 const HASH_PREFIX = 'w1';
@@ -56,7 +65,7 @@ export function simplify(pts, eps = 0.0012) {
 
 /** Canonical points for a stroke: simplified, then snapped to the quantization grid. */
 export function canonicalPoints(pts, kind) {
-  const s = kind === 'ruin' || kind === 'tap' ? pts : simplify(pts);
+  const s = kind === 'ruin' || kind === 'tap' || pts.length < 3 ? pts : simplify(pts);
   return s.slice(0, 4000).map((p) => ({ x: dequantize(quantize(p.x)), y: dequantize(quantize(p.y)) }));
 }
 
@@ -72,8 +81,8 @@ export function encodeBytes(entries, biome = 0) {
   v.setUint16(o, entries.length);
   o += 2;
   for (const e of entries) {
-    v.setUint8(o++, KINDS.indexOf(e.kind));
-    v.setUint8(o++, e.biome);
+    v.setUint8(o++, KINDS.indexOf(e.kind) | ((e.size ?? 0) << 4));
+    v.setUint8(o++, e.biome | ((e.plant ?? 0) << 4));
     v.setUint32(o, e.seed >>> 0);
     o += 4;
     v.setUint16(o, e.points.length);
@@ -98,9 +107,13 @@ export function decodeBytes(bytes) {
   o += 2;
   const entries = [];
   for (let i = 0; i < count; i++) {
-    const kind = KINDS[v.getUint8(o++)];
-    if (!kind) throw new Error('Corrupt world: unknown stroke');
-    const b = v.getUint8(o++);
+    const kb = v.getUint8(o++);
+    const kind = KINDS[kb & 15];
+    const size = kb >> 4;
+    if (!kind || size >= BRUSH_SIZES.length) throw new Error('Corrupt world: unknown stroke');
+    const bb = v.getUint8(o++);
+    const b = bb & 15;
+    const plant = bb >> 4;
     const seed = v.getUint32(o);
     o += 4;
     const n = v.getUint16(o);
@@ -110,7 +123,10 @@ export function decodeBytes(bytes) {
       points.push({ x: dequantize(v.getUint16(o)), y: dequantize(v.getUint16(o + 2)) });
       o += 4;
     }
-    entries.push({ kind, biome: b, seed, points });
+    const entry = { kind, biome: b, seed, points };
+    if (size) entry.size = size;
+    if (plant) entry.plant = plant;
+    entries.push(entry);
   }
   return { biome, entries };
 }
