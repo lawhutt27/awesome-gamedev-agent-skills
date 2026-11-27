@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#2a211a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Living Parchment: Figures</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%23b8342a'/%3E%3Ccircle cx='32' cy='22' r='7' fill='%23f3e6c8'/%3E%3Cpath d='M32 30v14M22 36h20M32 44l-7 9M32 44l7 9' stroke='%23f3e6c8' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="scene" aria-label="Character stage"></canvas>
+    <canvas id="ink" class="ink-layer" aria-hidden="true"></canvas>
+
+    <!-- Top bar: name and the actions that apply everywhere. -->
+    <header class="topbar">
+      <div class="brand"><span class="seal-dot" aria-hidden="true"></span><span>Figures</span></div>
+      <div class="top-actions">
+        <button class="chip icon" id="undo" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>
+          <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" /></svg>
+        </button>
+        <button class="chip icon" id="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled>
+          <svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5M20 9H10a6 6 0 0 0 0 12h3" /></svg>
+        </button>
+        <button class="chip" id="random" title="Random figure (keeps your drawing)">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4" /><circle cx="8.5" cy="8.5" r="1.2" /><circle cx="15.5" cy="15.5" r="1.2" /><circle cx="15.5" cy="8.5" r="1.2" /><circle cx="8.5" cy="15.5" r="1.2" /></svg>
+          <span class="label">Random</span>
+        </button>
+        <button class="chip icon" id="help-btn" title="How it works" aria-label="How it works">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01" /></svg>
+        </button>
+        <button class="chip primary" id="export-btn" title="Export and share">
+          <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 17v3h14v-3" /></svg>
+          <span>Export</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Sketch tools: left rail, only on the Sketch tab. -->
+    <nav id="sketch-rail" class="rail" role="radiogroup" aria-label="Sketch tool" hidden>
+      <p class="rail-label">Draw</p>
+      <button class="tool-btn" data-tool="auto" role="radio" aria-checked="true" title="Draw: a loop puffs into a body part, a line becomes a limb, a tap a dot, a zigzag spikes">
+        <svg viewBox="0 0 24 24"><path d="M4 20l4-1L19 8l-3-3L5 16l-1 4zM14 7l3 3" /></svg><span>Draw</span>
+      </button>
+      <button class="tool-btn" data-tool="blob" role="radio" aria-checked="false" title="Blob: every stroke puffs into a rounded shape">
+        <svg viewBox="0 0 24 24"><path d="M6 14c-2-5 3-10 8-9s7 6 4 10-10 4-12-1z" /></svg><span>Blob</span>
+      </button>
+      <button class="tool-btn" data-tool="tube" role="radio" aria-checked="false" title="Limb: every stroke becomes a tube (arms, tails, horns)">
+        <svg viewBox="0 0 24 24"><path d="M4 18c4-1 5-11 9-11s4 6 7 5" /></svg><span>Limb</span>
+      </button>
+      <button class="tool-btn" data-tool="dot" role="radio" aria-checked="false" title="Dot: tap for eyes, buttons, spots">
+        <svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="2.5" /><circle cx="16" cy="12" r="2.5" /></svg><span>Dot</span>
+      </button>
+      <button class="tool-btn" data-tool="spikes" role="radio" aria-checked="false" title="Spikes: a zigzag makes hair, fur or spines">
+        <svg viewBox="0 0 24 24"><path d="M3 18l3-9 3 9 3-9 3 9 3-9 3 9" /></svg><span>Spikes</span>
+      </button>
+      <p class="rail-label">Edit</p>
+      <button class="tool-btn" data-tool="sculpt" role="radio" aria-checked="false" title="Sculpt: tap a part to grow, shrink, puff or flatten it">
+        <svg viewBox="0 0 24 24"><path d="M3 19c3.5-1 4.5-4.5 9-4.5s5.5 3.5 9 4.5M12 12V4m0 0L9 7m3-3 3 3" /></svg><span>Sculpt</span>
+      </button>
+      <button class="tool-btn" data-tool="paint" role="radio" aria-checked="false" title="Paint: tap a part to colour it with the ink">
+        <svg viewBox="0 0 24 24"><path d="M14 4l6 6-8 8H6v-6zM4 20h6" /></svg><span>Paint</span>
+      </button>
+      <button class="tool-btn" data-tool="erase" role="radio" aria-checked="false" title="Erase: tap a part to remove it">
+        <svg viewBox="0 0 24 24"><path d="M9 20h11M4.5 15.5l8.5-9.5 6 6-7.5 8H9z" /></svg><span>Erase</span>
+      </button>
+      <button class="tool-btn" data-tool="look" role="radio" aria-checked="false" title="Look: drag to turn the figure">
+        <svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg><span>Look</span>
+      </button>
+    </nav>
+
+    <!-- Bottom dock: one tab per job, in the order you build a character. -->
+    <nav class="dock" role="tablist" aria-label="Build steps">
+      <button class="tab" role="tab" data-tab="sketch" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M4 20l4-1L19 8l-3-3L5 16l-1 4z" /></svg><span>Sketch</span></button>
+      <button class="tab" role="tab" data-tab="parts" aria-selected="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="6" r="3" /><path d="M7 11h10l-1 6H8zM9 17v4M15 17v4" /></svg><span>Parts</span></button>
+      <button class="tab" role="tab" data-tab="shape" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg><span>Shape</span></button>
+      <button class="tab" role="tab" data-tab="colors" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2s-1-2 0-3 3 0 4-1 3-2 3-5c0-4-4-7-9-7z" /><circle cx="7.5" cy="11" r="1.2" /><circle cx="11" cy="7" r="1.2" /><circle cx="16" cy="8.5" r="1.2" /></svg><span>Colors</span></button>
+      <button class="tab" role="tab" data-tab="motion" aria-selected="false"><svg viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="2" /><path d="M8 21l3-6 3 2v4M11 15l1-6 4 3 3-1M12 9 8 10l-2 3" /></svg><span>Motion</span></button>
+      <button class="tab" role="tab" data-tab="card" aria-selected="false"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></svg><span>Card</span></button>
+    </nav>
+
+    <!-- Panels: one per tab. -->
+    <section class="panel" id="panel-sketch" role="tabpanel" aria-label="Sketch" hidden>
+      <div class="panel-row" id="sketch-tip"></div>
+      <div class="group">
+        <h3>Ink</h3>
+        <div class="swatches" id="ink-swatches"></div>
+      </div>
+      <div class="group inline">
+        <h3>Size</h3>
+        <div class="seg" id="brush-size" role="radiogroup" aria-label="Brush size">
+          <button role="radio" data-size="fine" aria-checked="false">Fine</button>
+          <button role="radio" data-size="normal" aria-checked="true">Normal</button>
+          <button role="radio" data-size="bold" aria-checked="false">Bold</button>
+        </div>
+      </div>
+      <div class="group inline toggles">
+        <label class="switch"><input type="checkbox" id="mirror" checked /><span>Mirror</span></label>
+        <label class="switch"><input type="checkbox" id="guide" checked /><span>Mannequin</span></label>
+      </div>
+      <div class="group" id="sculpt-ops" hidden>
+        <h3>Sculpt</h3>
+        <div class="seg" role="radiogroup" aria-label="Sculpt action">
+          <button role="radio" data-op="grow" aria-checked="true">Grow</button>
+          <button role="radio" data-op="shrink" aria-checked="false">Shrink</button>
+          <button role="radio" data-op="puff" aria-checked="false">Puff</button>
+          <button role="radio" data-op="flatten" aria-checked="false">Flatten</button>
+        </div>
+      </div>
+      <div class="group">
+        <h3>My parts <small>save a drawing and reuse it on other figures</small></h3>
+        <div class="kit-save">
+          <input type="text" id="kit-name" placeholder="Name this drawing" maxlength="30" />
+          <button class="btn" id="kit-save">Save</button>
+        </div>
+        <div class="kit-list" id="kit-list"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-parts" role="tabpanel" aria-label="Parts">
+      <div class="cats" id="part-cats" role="tablist" aria-label="Part category"></div>
+      <div class="options" id="part-options"></div>
+    </section>
+
+    <section class="panel" id="panel-shape" role="tabpanel" aria-label="Shape" hidden>
+      <div class="sliders" id="shape-sliders"></div>
+      <button class="btn ghost" id="shape-reset">Reset shape</button>
+    </section>
+
+    <section class="panel" id="panel-colors" role="tabpanel" aria-label="Colors" hidden>
+      <div class="group">
+        <h3>Style</h3>
+        <div class="seg wrap" id="styles" role="radiogroup" aria-label="Render style"></div>
+      </div>
+      <div class="group">
+        <h3>Palette variants <small>tap to try one</small></h3>
+        <div class="variants" id="variants"></div>
+      </div>
+      <div id="slot-colors"></div>
+      <button class="btn ghost" id="paint-reset" hidden>Clear painted parts</button>
+    </section>
+
+    <section class="panel" id="panel-motion" role="tabpanel" aria-label="Motion" hidden>
+      <div class="group">
+        <h3>Animation</h3>
+        <div class="seg wrap" id="clips" role="radiogroup" aria-label="Animation"></div>
+      </div>
+      <div class="group">
+        <h3>Face</h3>
+        <div class="seg wrap" id="faces" role="radiogroup" aria-label="Expression"></div>
+      </div>
+      <div class="group inline toggles">
+        <label class="switch"><input type="checkbox" id="springy" checked /><span>Springy hair, capes and tails</span></label>
+      </div>
+      <div class="group buttons">
+        <button class="btn" id="pose-btn">Pose by hand</button>
+        <button class="btn" id="world-btn">Walk around</button>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-card" role="tabpanel" aria-label="Card" hidden>
+      <label class="field"><span>Name</span><input type="text" id="card-name" maxlength="40" /></label>
+      <label class="field"><span>Role</span><input type="text" id="card-role" maxlength="40" /></label>
+      <label class="field"><span>Story</span><textarea id="card-bio" rows="3" maxlength="400" placeholder="A line or two about who they are"></textarea></label>
+      <div class="sliders" id="card-stats"></div>
+      <button class="btn" id="card-download">Download card</button>
+    </section>
+
+    <!-- Pose mode bar. -->
+    <div class="modebar" id="pose-bar" hidden>
+      <span>Drag a hand, foot or the head</span>
+      <button class="btn ghost" id="pose-reset">Reset</button>
+      <button class="btn ghost" id="pose-cancel">Cancel</button>
+      <button class="btn" id="pose-done">Save pose</button>
+    </div>
+
+    <!-- World mode. -->
+    <div class="modebar" id="world-bar" hidden>
+      <span class="hide-narrow">Stick or WASD to walk, Shift to run</span>
+      <label class="btn ghost file">Load world .glb<input type="file" id="world-file" accept=".glb,.gltf,model/gltf-binary" /></label>
+      <button class="btn ghost" id="world-stage">Paper stage</button>
+      <button class="btn ghost" id="world-save">Save scene .glb</button>
+      <button class="btn" id="world-exit">Done</button>
+    </div>
+    <div id="stick" class="stick"><div class="knob"></div></div>
+
+    <!-- Start screen. -->
+    <div class="overlay" id="start" hidden>
+      <div class="card start-card">
+        <h1>Living Parchment: <em>Figures</em></h1>
+        <p class="lede">Make a character, watch it move, and take it into Blender or your game.</p>
+        <div class="choices">
+          <button class="choice" id="start-sketch">
+            <svg viewBox="0 0 48 48"><path d="M10 38l6-2 20-20-4-4-20 20zM28 14l4 4" /><path d="M14 10c3-3 9-3 10 2" /></svg>
+            <b>Sketch</b><span>Draw over a mannequin and your lines puff up into a body.</span>
+          </button>
+          <button class="choice" id="start-swap">
+            <svg viewBox="0 0 48 48"><circle cx="24" cy="12" r="6" /><path d="M14 22h20l-2 12H16zM18 34v8M30 34v8" /><path d="M6 18h4M38 18h4" /></svg>
+            <b>Swap parts</b><span>Pick heads, bodies, hair and outfits, then tweak.</span>
+          </button>
+        </div>
+        <button class="link" id="start-continue" hidden>Continue your last figure</button>
+      </div>
+    </div>
+
+    <!-- Export and share. -->
+    <div class="overlay" id="export" hidden>
+      <div class="card export-card" role="dialog" aria-labelledby="export-title">
+        <h2 id="export-title">Export and share</h2>
+        <section>
+          <h3>For Blender and game engines</h3>
+          <p class="note">One rigged mesh on a Mixamo-named skeleton, every animation as an action, and face shape keys. In Blender: File, Import, glTF 2.0. 1 unit = 1 metre.</p>
+          <div class="row">
+            <label>Detail
+              <select id="ex-detail"><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+            </label>
+            <label class="switch"><input type="checkbox" id="ex-anims" checked /><span>Animations</span></label>
+            <span class="tri" id="ex-tris"></span>
+          </div>
+          <div class="row buttons">
+            <button class="btn" id="ex-glb">Download .glb</button>
+            <button class="btn ghost" id="ex-vrm" title="VRM 1.0 for VTuber and avatar apps">VRM avatar</button>
+            <button class="btn ghost" id="ex-lods" title="High, medium and low detail in one zip">LOD set</button>
+          </div>
+          <div class="row">
+            <label>Crowd
+              <select id="ex-crowd-n"><option>5</option><option selected>10</option><option>25</option><option>50</option><option>100</option></select>
+            </label>
+            <button class="btn ghost" id="ex-crowd" title="Seeded look-alike variants for NPC crowds">Download crowd</button>
+          </div>
+        </section>
+        <section>
+          <h3>For 2D games</h3>
+          <div class="row">
+            <label>Directions <select id="ex-dirs"><option value="4">4</option><option value="8">8</option></select></label>
+            <label>Frame <select id="ex-cell"><option value="128">128 px</option><option value="256" selected>256 px</option></select></label>
+            <button class="btn ghost" id="ex-sprites">Sprite sheets</button>
+          </div>
+        </section>
+        <section>
+          <h3>To share</h3>
+          <div class="row buttons">
+            <button class="btn ghost" id="ex-link">Copy link</button>
+            <button class="btn ghost" id="ex-photo">Photo</button>
+            <button class="btn ghost" id="ex-gif">Turntable GIF</button>
+            <button class="btn ghost" id="ex-card">Character card</button>
+          </div>
+        </section>
+        <p class="status" id="ex-status" aria-live="polite"></p>
+        <button class="btn close" id="export-close">Close</button>
+      </div>
+    </div>
+
+    <!-- Help. -->
+    <div class="overlay" id="help" hidden>
+      <div class="card help-card" role="dialog" aria-labelledby="help-title">
+        <h2 id="help-title">How it works</h2>
+        <dl>
+          <dt>Sketch</dt>
+          <dd>Draw over the faint mannequin. A closed loop puffs into a rounded part, an open line becomes a limb, a tap makes a dot, a zigzag makes spikes. Draw on top of a part to add a bump, a face or a stripe. Mirror copies to the other side.</dd>
+          <dt>Parts</dt>
+          <dd>Swap heads, eyes, hair, hats, bodies, arms, legs, feet and extras. Parts and drawing mix freely.</dd>
+          <dt>Shape and Colors</dt>
+          <dd>Sliders stretch the whole body, drawing included. Pick a style, a palette variant or exact colours.</dd>
+          <dt>Motion</dt>
+          <dd>Every figure is rigged automatically: try Walk, Run, Jump, Wave and Sit, change the face, pose it by hand, or walk it around a world.</dd>
+          <dt>Export</dt>
+          <dd>A .glb opens in Blender with its armature, actions and shape keys. Also VRM, LOD sets, crowds, sprite sheets, GIFs and a share link.</dd>
+        </dl>
+        <p class="keys">Ctrl+Z undo · Ctrl+Shift+Z redo · Right-drag or two fingers to turn the view</p>
+        <button class="btn close" id="help-close">Got it</button>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
