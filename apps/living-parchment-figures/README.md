@@ -14,7 +14,19 @@ npm run dev        # http://localhost:5173 (also on your LAN, for testing on a p
 npm run build      # static site in dist/ (works from any folder, so it can go straight to itch.io)
 npm test           # unit tests (node --test)
 npm run test:e2e   # builds, then drives the app in Chromium and checks every export
+npm run build:single  # one self-contained .html in dist-single/ that runs offline
 ```
+
+### One file, offline
+
+`npm run build:single` inlines the whole app (scripts, styles, no network calls) into
+`dist-single/figures.html`. Double-click it and it runs from disk in any modern browser.
+It also writes `dist-single/figures-artifact.html`, the same app as a page body for publishing
+as a claude.ai Artifact. Inside an Artifact, files are saved through the viewer's downloads
+prompt, which takes zips, so a single `.glb`, `.vrm`, `.png` or `.gif` arrives zipped
+(`Wanderer-glb.zip` holds `Wanderer.glb`). The Artifact's address cannot be shared, so
+**Copy link** copies a figure code instead; paste it into **Figure code** in the Export dialog,
+here or in the offline file, to open that exact figure.
 
 ## The screen
 
@@ -70,7 +82,7 @@ figure into one file.
 | **LOD set** | A zip of the figure at three levels of detail (about 19k, 8k and 4k triangles for a default figure) on the same armature, plus a README with the counts. |
 | **Download crowd** | 5 to 100 seeded look-alikes (colours, proportions, hair, hats and faces vary, the body plan stays), each a rigged `.glb`. |
 | **Sprite sheets** | One transparent PNG per animation, a row per direction (4 or 8; `S` faces the camera, `E` faces right) and 8 frames per row, plus `atlas.json`. |
-| **Copy link** | The whole figure, drawing included, in the page link. |
+| **Copy link** | The whole figure, drawing included, in the page link. **Figure code** opens one that was pasted. |
 | **Photo**, **Turntable GIF**, **Character card** | A PNG of the view, a spinning 320 px GIF, and the parchment card with portrait, name, role, stats and story. |
 
 ### Into Blender

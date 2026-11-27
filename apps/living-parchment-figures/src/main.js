@@ -841,8 +841,7 @@ $('world-file').onchange = async (e) => {
 };
 $('world-save').onclick = async () => {
   const glb = await world.exportScene(state);
-  download(glb, `${safeName(state.card.name)}_scene.glb`, 'model/gltf-binary');
-  toast('Saved the world and your figure as one .glb');
+  toast((await download(glb, `${safeName(state.card.name)}_scene.glb`, 'model/gltf-binary')) || 'Saved the world and your figure as one .glb');
 };
 
 // ------------------------------------------------------------------ export dialog
@@ -882,34 +881,41 @@ $('export-close').onclick = () => ($('export').hidden = true);
 $('ex-detail').onchange = updateTris;
 $('ex-glb').onclick = () =>
   busy('Building .glb', async () => {
-    download(await exportGLB(state, glbOpts()), `${base()}.glb`, 'model/gltf-binary');
-    exStatus('Saved. In Blender: File, Import, glTF 2.0 (.glb/.gltf).');
+    exStatus((await download(await exportGLB(state, glbOpts()), `${base()}.glb`, 'model/gltf-binary')) || 'Saved. In Blender: File, Import, glTF 2.0 (.glb/.gltf).');
   });
 $('ex-vrm').onclick = () =>
   busy('Building VRM', async () => {
-    download(await exportGLB(state, { ...glbOpts(), vrm: true }), `${base()}.vrm`, 'model/gltf-binary');
-    exStatus('Saved a VRM 1.0 avatar with humanoid bones and face expressions.');
+    exStatus((await download(await exportGLB(state, { ...glbOpts(), vrm: true }), `${base()}.vrm`, 'model/gltf-binary')) || 'Saved a VRM 1.0 avatar with humanoid bones and face expressions.');
   });
 $('ex-lods').onclick = () =>
   busy('Building three levels of detail', async () => {
-    download(await exportLODs(state, { animations: $('ex-anims').checked }), `${base()}_LODs.zip`, 'application/zip');
-    exStatus('Saved high, medium and low detail .glb files in one zip.');
+    exStatus((await download(await exportLODs(state, { animations: $('ex-anims').checked }), `${base()}_LODs.zip`, 'application/zip')) || 'Saved high, medium and low detail .glb files in one zip.');
   });
 $('ex-crowd').onclick = () =>
   busy('Building the crowd', async () => {
     const n = Number($('ex-crowd-n').value);
-    download(await exportCrowd(state, n, Date.now() % 100000, glbOpts()), `${base()}_crowd_${n}.zip`, 'application/zip');
-    exStatus(`Saved ${n} look-alike figures, each a rigged .glb.`);
+    exStatus((await download(await exportCrowd(state, n, Date.now() % 100000, glbOpts()), `${base()}_crowd_${n}.zip`, 'application/zip')) || `Saved ${n} look-alike figures, each a rigged .glb.`);
   });
 $('ex-sprites').onclick = () =>
   busy('Rendering sprite sheets', async () => {
     const zip = await spriteSheets(app, state, { directions: Number($('ex-dirs').value), cell: Number($('ex-cell').value) });
-    download(zip, `${base()}_sprites.zip`, 'application/zip');
-    exStatus('Saved one sheet per animation plus atlas.json.');
+    exStatus((await download(zip, `${base()}_sprites.zip`, 'application/zip')) || 'Saved one sheet per animation plus atlas.json.');
   });
 $('ex-link').onclick = () =>
   busy('Making a link', async () => {
     const code = await encodeState(state);
+    const embedded = window.top !== window || /claudeusercontent|claude\.ai/.test(location.hostname);
+    if (embedded) {
+      // Inside the Artifact the page address is not one you can share, so copy the code itself.
+      try {
+        await navigator.clipboard.writeText(code);
+        showCode(code);
+        exStatus('Figure code copied. Paste it into Figure code, here or in the offline file, to open this exact figure.');
+      } catch {
+        showCode(code);
+      }
+      return;
+    }
     const url = `${location.origin}${location.pathname}#c=${code}`;
     window.history.replaceState(null, '', `#c=${code}`);
     try {
@@ -919,20 +925,36 @@ $('ex-link').onclick = () =>
       exStatus('The link is in the address bar now.');
     }
   });
+function showCode(code) {
+  const box = $('ex-code');
+  box.value = code;
+  box.select();
+  exStatus('Copy this figure code. Paste it into Figure code, here or in the offline file, to open this exact figure.');
+}
+$('ex-open-code').onclick = () =>
+  busy('Opening the figure', async () => {
+    const raw = $('ex-code').value.trim();
+    const code = raw.includes('#c=') ? raw.split('#c=').pop() : raw;
+    if (!code) return exStatus('Paste a figure code first.');
+    try {
+      setState(await decodeState(code));
+      frameCamera(true);
+      exStatus('Opened the figure from its code.');
+    } catch {
+      exStatus('That code could not be read.');
+    }
+  });
 $('ex-photo').onclick = () =>
   busy('Taking a photo', async () => {
-    download(await photo(app), `${base()}.png`, 'image/png');
-    exStatus('Saved a photo.');
+    exStatus((await download(await photo(app), `${base()}.png`, 'image/png')) || 'Saved a photo.');
   });
 $('ex-gif').onclick = () =>
   busy('Spinning the turntable', async () => {
-    download(await turntableGif(app, state), `${base()}_turntable.gif`, 'image/gif');
-    exStatus('Saved a turntable GIF.');
+    exStatus((await download(await turntableGif(app, state), `${base()}_turntable.gif`, 'image/gif')) || 'Saved a turntable GIF.');
   });
 $('ex-card').onclick = () =>
   busy('Drawing the card', async () => {
-    download(await characterCard(app, state), `${base()}_card.png`, 'image/png');
-    exStatus('Saved the character card.');
+    exStatus((await download(await characterCard(app, state), `${base()}_card.png`, 'image/png')) || 'Saved the character card.');
   });
 
 // ------------------------------------------------------------------ card inputs
@@ -949,7 +971,10 @@ for (const [id, key] of [
   });
   $(id).addEventListener('change', refreshUI);
 }
-$('card-download').onclick = async () => download(await characterCard(app, state), `${base()}_card.png`, 'image/png');
+$('card-download').onclick = async () => {
+  const note = await download(await characterCard(app, state), `${base()}_card.png`, 'image/png');
+  if (note) toast(note, 4000);
+};
 
 // ------------------------------------------------------------------ remaining controls
 
