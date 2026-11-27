@@ -10,7 +10,6 @@ import {
   polygonArea,
   smoothPath,
   trimClosure,
-  OrbitRig,
 } from '../src/input/GestureClassifier.js';
 
 const PX = 800; // pretend the page spans 800 CSS px on screen
@@ -121,10 +120,10 @@ test('loop that overshoots its start still counts and is trimmed', () => {
   assert.ok(r.points.length < pts.length);
 });
 
-test('angular loops (>= 3 sharp corners) -> ruin with a polygon footprint', () => {
+test('angular loops (>= 3 sharp corners) -> mountain with a polygon footprint', () => {
   for (const sides of [3, 4, 5]) {
     const r = classifyStroke(stroke(polygon(0.5, 0.5, 0.12, sides, 15, 0.004)));
-    assert.equal(r.kind, 'ruin', `${sides} sides`);
+    assert.equal(r.kind, 'mountain', `${sides} sides`);
     assert.equal(r.polygon.length, sides);
   }
 });
@@ -156,7 +155,7 @@ test('short flick (moves, but too short for a river) -> flick', () => {
 test('tiny closed scribble below the loop minimum is not a hill', () => {
   const r = classifyStroke(stroke(circle(0.5, 0.5, 0.012, 30)));
   assert.notEqual(r.kind, 'loop');
-  assert.notEqual(r.kind, 'ruin');
+  assert.notEqual(r.kind, 'mountain');
 });
 
 test('thresholds can be overridden', () => {
@@ -164,24 +163,3 @@ test('thresholds can be overridden', () => {
   assert.equal(r.kind, 'flick');
 });
 
-test('OrbitRig clamps tilt and zoom and converges with damping', () => {
-  const cam = {
-    position: { x: 0, y: 0, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; } },
-    lookAt() {},
-  };
-  const rig = new OrbitRig(cam);
-  rig.orbit(0, 10);
-  assert.equal(rig.goal.pitch, rig.limits.pitchMax);
-  rig.orbit(0, -10);
-  assert.equal(rig.goal.pitch, rig.limits.pitchMin);
-  rig.zoom(100);
-  assert.equal(rig.goal.distance, rig.limits.distMax);
-  rig.zoom(0.0001);
-  assert.equal(rig.goal.distance, rig.limits.distMin);
-  for (let i = 0; i < 200; i++) rig.update(1 / 60);
-  assert.ok(Math.abs(rig.distance - rig.limits.distMin) < 1e-3);
-  const d = Math.hypot(cam.position.x, cam.position.y, cam.position.z);
-  assert.ok(Math.abs(d - rig.distance) < 1e-6);
-  rig.fit(0.5); // portrait phone pulls the camera back
-  assert.ok(rig.distance > 15.5);
-});

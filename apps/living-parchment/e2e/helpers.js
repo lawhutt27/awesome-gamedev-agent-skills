@@ -26,6 +26,9 @@ export async function launch() {
  * setPointerCapture throws for synthetic pointer ids, so the test page makes it lenient.
  */
 const INIT = () => {
+  try {
+    localStorage.setItem('living-parchment-seen-help', '1'); // skip the first-visit help panel
+  } catch {}
   for (const name of ['setPointerCapture', 'releasePointerCapture']) {
     const orig = Element.prototype[name];
     Element.prototype[name] = function lenient(id) {
@@ -38,8 +41,8 @@ const INIT = () => {
   }
 };
 
-export async function openApp(browser, url, { viewport = { width: 720, height: 540 }, ...ctxOpts } = {}) {
-  const context = await browser.newContext({ viewport, ...ctxOpts });
+export async function openApp(browser, url, { viewport = { width: 720, height: 540 }, hash = '', context: existing, ...ctxOpts } = {}) {
+  const context = existing ?? (await browser.newContext({ viewport, acceptDownloads: true, ...ctxOpts }));
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
@@ -50,7 +53,7 @@ export async function openApp(browser, url, { viewport = { width: 720, height: 5
     errors.push(`console: ${t}`);
   });
   await page.addInitScript(INIT);
-  await page.goto(`${url}?quality=low`);
+  await page.goto(`${url}?quality=low${hash}`);
   await page.waitForFunction(() => window.renderer?.info.render.frame > 1, null, { timeout: 60000 });
   return { context, page, errors };
 }
@@ -71,18 +74,18 @@ export async function uvToScreen(page, pts) {
 }
 
 /** Dispatch a full stroke (screen px points) as pointer events on the canvas. */
-export async function stroke(page, screenPts, { pointerType = 'mouse', buttons = 1, shiftKey = false } = {}) {
+export async function stroke(page, screenPts, { pointerType = 'mouse', buttons = 1, shiftKey = false, altKey = false } = {}) {
   await page.evaluate(
-    ({ pts, pointerType, buttons, shiftKey }) => {
+    ({ pts, pointerType, buttons, shiftKey, altKey }) => {
       const el = document.getElementById('scene');
-      const base = { bubbles: true, cancelable: true, composed: true, pointerId: 1, pointerType, isPrimary: true, shiftKey };
+      const base = { bubbles: true, cancelable: true, composed: true, pointerId: 1, pointerType, isPrimary: true, shiftKey, altKey };
       const ev = (type, [x, y], b) =>
         el.dispatchEvent(new PointerEvent(type, { ...base, clientX: x, clientY: y, buttons: b, button: type === 'pointermove' ? -1 : 0, pressure: b ? 0.5 : 0 }));
       ev('pointerdown', pts[0], buttons);
       for (let i = 1; i < pts.length; i++) ev('pointermove', pts[i], buttons);
       ev('pointerup', pts[pts.length - 1], 0);
     },
-    { pts: screenPts, pointerType, buttons, shiftKey },
+    { pts: screenPts, pointerType, buttons, shiftKey, altKey },
   );
 }
 

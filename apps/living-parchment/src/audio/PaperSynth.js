@@ -43,6 +43,17 @@ export class PaperSynth {
     this.ctx = null;
     this.enabled = true;
     this._unlocked = false;
+    this._muted = false;
+  }
+
+  /** Mute or unmute every sound (the Options panel). */
+  get muted() {
+    return this._muted;
+  }
+
+  set muted(m) {
+    this._muted = !!m;
+    if (this.out) this.out.gain.value = this._muted ? 0 : 0.9;
   }
 
   /** Create / resume the AudioContext. Must run inside a user gesture (first touch). */
@@ -83,7 +94,7 @@ export class PaperSynth {
     this.master.threshold.value = -14;
     this.master.ratio.value = 4;
     this.out = ctx.createGain();
-    this.out.gain.value = 0.9;
+    this.out.gain.value = this._muted ? 0 : 0.9;
     this.master.connect(this.out).connect(ctx.destination);
 
     // Continuous nib scratch.

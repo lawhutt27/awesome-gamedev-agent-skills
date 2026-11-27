@@ -1,8 +1,8 @@
 // Gesture-to-world grammar.
 //
 // Pure stroke geometry (no DOM, no Three.js) lives at the top of this file so it can be
-// unit-tested in Node. The bottom half binds @use-gesture/vanilla to the canvas and owns the
-// two-finger orbit / tilt / zoom camera rig.
+// unit-tested in Node. The bottom half binds @use-gesture/vanilla to the canvas and drives the
+// camera rig (CameraRig.js): two-finger orbit / tilt and the pinch "Dimensional Fold".
 //
 // Stroke points are in parchment UV space (0..1 on both axes, v grows "down" the page, like
 // canvas pixels) plus a parallel list of screen points in CSS pixels for tap detection.
@@ -17,7 +17,7 @@ export const DEFAULTS = {
   closeRel: 0.3, // ...and below this fraction of the stroke's bounding-box size
   minArea: 0.0015, // uv^2: loops must enclose something
   cornerAngle: 48, // degrees: a turn sharper than this counts as a corner
-  ruinCorners: 3, // corners needed for an angular (ruin) loop
+  mountainCorners: 3, // corners needed for an angular (mountain) loop
 };
 
 // ---------------------------------------------------------------- basic geometry
@@ -320,7 +320,7 @@ export function recognizeDollarOne(pts) {
 /**
  * Classify a finished stroke.
  * @param {{points:{x,y}[], screen:{x,y}[], duration:number}} stroke  points in UV, screen in px
- * @returns {{kind:'tap'|'flick'|'loop'|'ruin'|'river', points, polygon?, corners?, recognized?, length}}
+ * @returns {{kind:'tap'|'flick'|'loop'|'mountain'|'river', points, polygon?, corners?, recognized?, length}}
  */
 export function classifyStroke(stroke, opts = {}) {
   const o = { ...DEFAULTS, ...opts };
@@ -344,15 +344,15 @@ export function classifyStroke(stroke, opts = {}) {
   if (closed) {
     const { corners, points } = findCorners(ring, { closed: true, angle: o.cornerAngle });
     const recognized = recognizeDollarOne(ring);
-    let angular = corners.length >= o.ruinCorners;
+    let angular = corners.length >= o.mountainCorners;
     // Borderline: two crisp corners but the shape clearly matches a polygon template.
     if (!angular && corners.length === 2 && recognized.angular && recognized.score > 0.82) angular = true;
-    // A very clean circle never becomes a ruin, even if jitter produced corners.
+    // A very clean circle never becomes a mountain, even if jitter produced corners.
     if (angular && recognized.name === 'circle' && recognized.score > 0.93 && corners.length < 4) angular = false;
     const polygon = angular ? corners.map((i) => points[i]) : null;
     return {
       ...base,
-      kind: angular ? 'ruin' : 'loop',
+      kind: angular ? 'mountain' : 'loop',
       points: ring,
       polygon,
       corners: corners.length,
@@ -364,64 +364,20 @@ export function classifyStroke(stroke, opts = {}) {
   return { ...base, kind: 'flick' };
 }
 
-// ---------------------------------------------------------------- camera rig
-
-const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-
-/** Damped orbit rig around the page centre: yaw (twist), pitch (tilt) and distance (zoom). */
-export class OrbitRig {
-  constructor(camera, { yaw = 0, pitch = 1.05, distance = 15.5 } = {}) {
-    this.camera = camera;
-    this.yaw = yaw;
-    this.pitch = pitch;
-    this.distance = distance;
-    this.goal = { yaw, pitch, distance };
-    this.limits = { pitchMin: 0.32, pitchMax: 1.5, distMin: 6, distMax: 26 };
-    this.target = { x: 0, y: 0, z: 0 };
-  }
-  orbit(dYaw, dPitch) {
-    this.goal.yaw += dYaw;
-    this.goal.pitch = clamp(this.goal.pitch + dPitch, this.limits.pitchMin, this.limits.pitchMax);
-  }
-  zoom(factor) {
-    this.goal.distance = clamp(this.goal.distance * factor, this.limits.distMin, this.limits.distMax);
-  }
-  /** Fit the page to the viewport: portrait phones need the camera further away. */
-  fit(aspect) {
-    // 15.5 frames the page at ~4:3 and wider; narrower screens back off in proportion.
-    const d = aspect < 1.3 ? (15.5 * 1.3) / Math.max(aspect, 0.4) : 15.5;
-    // Nudge the look-at point toward the near edge so the toolbar never covers the page.
-    this.target.z = aspect < 1 ? 0.3 : 0.55;
-    this.limits.distMax = Math.max(26, d * 1.6);
-    this.goal.distance = this.distance = clamp(d, this.limits.distMin, this.limits.distMax);
-  }
-  update(dt) {
-    const k = 1 - Math.exp(-dt * 12);
-    this.yaw += (this.goal.yaw - this.yaw) * k;
-    this.pitch += (this.goal.pitch - this.pitch) * k;
-    this.distance += (this.goal.distance - this.distance) * k;
-    const cp = Math.cos(this.pitch);
-    const c = this.camera;
-    c.position.set(
-      this.target.x + Math.sin(this.yaw) * cp * this.distance,
-      this.target.y + Math.sin(this.pitch) * this.distance,
-      this.target.z + Math.cos(this.yaw) * cp * this.distance,
-    );
-    c.lookAt(this.target.x, this.target.y, this.target.z);
-  }
-}
-
 // ---------------------------------------------------------------- pointer / gesture binding
 
 /**
  * Binds drawing and camera gestures to `element`.
- *  - one finger / left mouse: draw a stroke (classified on release)
- *  - two fingers: pinch = zoom, twist = orbit, drag up/down = tilt
- *  - right / middle mouse or shift-drag: orbit + tilt; wheel: zoom
+ *  - one finger / left mouse: draw a stroke (classified on release); at ground level it
+ *    looks around instead, and a tap still plants
+ *  - two fingers: pinch = Dimensional Fold (map <-> ground), twist = orbit, drag up/down = tilt
+ *  - right mouse or shift-drag: orbit + tilt; middle mouse or alt-drag: pan; wheel: zoom
+ *  - with the Move tool (handlers.tool() === 'move') one finger / left mouse orbits instead of
+ *    drawing, and right-drag pans
  *
  * `project(clientX, clientY)` must return {x, y} in parchment UV or null when off the page.
  * Handlers: onStart(uv, screen), onMove(uv, screen, velocityPxPerMs), onEnd(classification),
- * onCancel(), onCameraGesture().
+ * onCancel(), onCameraGesture(), onTap(classification) for taps at ground level, isPov().
  */
 export class GestureClassifier {
   constructor(element, rig, project, handlers, GestureCtor, opts = {}) {
@@ -432,7 +388,7 @@ export class GestureClassifier {
     this.opts = opts;
     this.stroke = null;
     this.pinching = false;
-    this.mode = null; // 'draw' | 'orbit' | null
+    this.mode = null; // 'draw' | 'orbit' | 'pan' | 'look' | null
 
     element.addEventListener('contextmenu', (e) => e.preventDefault());
     // iOS Safari fires its own pinch events; block them so the page never zooms.
@@ -463,10 +419,42 @@ export class GestureClassifier {
   _onDrag(s) {
     const e = s.event;
     if (s.first) {
-      const orbitButton = e && (e.buttons & 2 || e.buttons & 4 || e.shiftKey);
-      this.mode = this.pinching || s.touches > 1 ? null : orbitButton ? 'orbit' : 'draw';
+      const buttons = e?.buttons ?? 1;
+      const orbitButton = !!e && (buttons & 2 || e.shiftKey);
+      const panButton = !!e && (buttons & 4 || (e.altKey && buttons & 1));
+      const pov = this.h.isPov?.() ?? false;
+      const move = (this.h.tool?.() ?? 'draw') === 'move';
+      if (this.pinching || s.touches > 1) this.mode = null;
+      else if (pov) this.mode = orbitButton || panButton ? 'orbit' : 'look';
+      else if (panButton) this.mode = 'pan';
+      else if (orbitButton) this.mode = move ? 'pan' : 'orbit';
+      else this.mode = move ? 'orbit' : 'draw';
+      if (this.mode === 'pan') this.h.onCameraGesture?.();
       if (this.mode === 'draw') this._begin(s);
+      if (this.mode === 'look') {
+        this.look = { x: s.xy[0], y: s.xy[1], t0: s.timeStamp, dist: 0 };
+        this.h.onCameraGesture?.();
+      }
       if (this.mode === 'orbit') this.h.onCameraGesture?.();
+      return;
+    }
+    if (this.mode === 'look') {
+      // Ground level: one finger looks around; a tap still plants.
+      const [dx, dy] = s.delta;
+      this.look.dist += Math.abs(dx) + Math.abs(dy);
+      if (!this.pinching && s.touches <= 1) this.rig.look(-dx * 0.005, -dy * 0.004);
+      if (s.last) {
+        const lk = this.look;
+        this.mode = null;
+        this.look = null;
+        if (lk.dist < (this.opts.tapMaxScreen ?? DEFAULTS.tapMaxScreen) && !this.pinching) {
+          const uv = this.project(lk.x, lk.y);
+          if (uv) {
+            const result = classifyStroke({ points: [uv], screen: [{ x: lk.x, y: lk.y }], duration: s.timeStamp - lk.t0 }, this.opts);
+            this.h.onTap?.(result);
+          }
+        }
+      }
       return;
     }
     if (this.pinching || s.touches > 1) {
@@ -477,6 +465,12 @@ export class GestureClassifier {
     if (this.mode === 'orbit') {
       const [dx, dy] = s.delta;
       this.rig.orbit(-dx * 0.006, dy * 0.005);
+      if (s.last) this.mode = null;
+      return;
+    }
+    if (this.mode === 'pan') {
+      const [dx, dy] = s.delta;
+      this.rig.panBy(dx, dy);
       if (s.last) this.mode = null;
       return;
     }

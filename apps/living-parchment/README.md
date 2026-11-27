@@ -1,7 +1,8 @@
 # Living Parchment World-Builder
 
 A mobile-first browser toy: draw ink strokes on an illuminated parchment page and they push
-up into a 2D-HD paper diorama in real time. Phases 1 and 2 of the design are built here.
+up into a 2D-HD paper diorama in real time, then fold the map down and walk around in it.
+All three phases of the design are built here.
 Everything is procedural (paper, ink, sprites, sound), so there are no asset files to load.
 
 ```bash
@@ -15,15 +16,51 @@ npm run build      # static site in dist/
 | Gesture | What it makes |
 | --- | --- |
 | Closed loop | A terraced hill. Loops drawn inside a hill stack a higher terrace. |
-| Closed loop with 3 or more sharp corners | A stone ruin: inked foundation walls on a flat plateau. |
+| Closed loop with 3 or more sharp corners | A rocky mountain: craggy stacked slopes, ridges from every corner to the summit, hachures and a snow cap. |
 | Open stroke | A river carved below the water table. The water flows the way you drew it. |
 | Tap (or a short flick) | A cluster (or a row) of paper-cutout trees, reeds, standing stones or lanterns, chosen by biome and terrain. |
-| Two fingers | Pinch to zoom, twist to orbit, drag up or down to tilt. A second finger cancels the stroke in progress. |
-| Desktop | Right-drag or shift-drag to orbit, wheel to zoom, `Ctrl/Cmd+Z` to undo, `1` `2` `3` for biomes. |
+| Two fingers | Twist to orbit, drag up or down to tilt, pinch to zoom. **Zoom runs into the Dimensional Fold:** pinch out past the closest zoom to sink to ground level at 65°; pinch in past the widest zoom for a flat 15° top-down map. A second finger cancels the stroke in progress. |
+| Walking | At ground level the thumbstick (or `W` `A` `S` `D`) walks, a one-finger drag looks around, and a tap still plants. **Walk** / **Map** jumps between the two. |
+| Desktop camera | Right-drag or shift-drag orbits (all the way round) and tilts (from nearly edge-on to straight down), middle-drag or Alt-drag pans, the wheel zooms. Keys: `Q` `E` turn, `R` `F` tilt, `+` `-` zoom, `W` `A` `S` `D` pan, `0` reset. A camera pad in the bottom-left corner has the same moves on wide screens. |
+| Other keys | `Ctrl/Cmd+Z` undo, `Ctrl/Cmd+Shift+Z` or `Ctrl+Y` redo, `1` `2` `3` biomes, `V` walk, `O` options, `P` photo, `H` help. |
 
-The stamp buttons switch between **Mossy Ruin**, **Autumn Ridge** and **Moonlit Tide**
-(light, water ink, contour ink and sprite art all change), **Undo** steps back up to 10 strokes,
-and **Clear** wipes the page (also undoable).
+The **tool rail** on the left can override the shape grammar: **Draw** (the shape decides),
+**Hill**, **Mountain** and **River** (any stroke makes that), **Lake** (any loop fills with still
+water, a bowl that shelves down from the bank), **Road** (a dirt road that levels the ground along
+its length and crosses rivers on a causeway), **Plant** (tap a cluster or drag a row), **Sculpt**
+(**Raise**, **Lower** or **Flatten** the ground where you drag; flatten levels to the height where
+the stroke started), **Erase** (rub the page back to bare paper, removing planting and splitting
+rivers) and **Move** (one-finger drag orbits, right-drag pans). River and Road show **width**
+chips (Thin, Normal, Wide, Very wide), the same setting as Options › Brush size.
+
+**Options** holds brush size (Fine / Normal / Bold / Huge: terrace height, river and road width,
+planting and eraser size), what to plant (by biome, or always trees, reeds, stones or lanterns), camera presets
+(top-down, tilted, low angle, turn, zoom, reset), the sun's direction and height, switches for ink
+outlines, contour lines, wind, flowing water and sound, and full screen. Options are remembered
+in the browser; brush size and planting are stored with each stroke so shared links rebuild them.
+
+The bottom bar switches between the **Moss**, **Autumn** and **Moon** biomes (Mossy Vale,
+Autumn Ridge, Moonlit Tide: light, water ink, contour ink and sprite art all change), **Undo**
+steps back up to 10 strokes, **Redo** replays them (strokes carry their own seeds, so a redo is
+exact) and **Clear** wipes the page (also undoable). On the right, **Help** opens the how-to-play
+panel (also shown on the first visit), **Options** opens the options card, **Random** draws a
+whole new world as one undoable step, **Photo** saves a PNG of the view, **Share** saves the whole
+world into the page link, and **.glb** opens **Export for games**. The world also autosaves in
+the browser.
+
+### Export for games
+
+| Setting | Choices |
+| --- | --- |
+| Map size | 10, 50, 100 or 250 m across (1 unit = 1 m in Blender, Godot, Unity and three.js). |
+| Height | As drawn, ×2 (default), ×3 or ×4. Stretches the ground only; trees keep their size. |
+| Detail | Terrain grid of 160, 320 or 480 segments (51k, 205k or 461k triangles). |
+| Trees and plants | Paper cards, markers only (empty nodes named `tree_001`, `reed_002`… with their height in metres as scale, for swapping in your own models) or left out. **Real size** keeps trees about 9 m tall on any map; **Diorama size** scales them with the map like the page. |
+| Include | A flat **Water** mesh over rivers and lakes (riverbeds keep their depth below it), the cardboard rim, and a zip of maps for engine terrain tools. |
+
+With maps on, the download is a zip of `map.glb`, `heightmap.png` (8-bit), `heightmap-513x513.r16`
+(16-bit little-endian, Unity's Import Raw), `splatmap.png` (red grass, green rock, blue water),
+`colormap.png` (the painted page) and a `README.txt` with the metres needed to line them up.
 
 ## How it works
 
@@ -33,11 +70,17 @@ src/
 ├── terrain/
 │   ├── ParchmentCanvas.js   # Dual offscreen 2D canvases, undo stack, stamp brushes
 │   └── TerrainShader.js     # Vertex height displacement, contour lines, ink water, rim
+├── render/
+│   └── InkEdgePass.js       # Screen-space Sobel + depth-Laplacian ink edges, tone mapping
 ├── input/
-│   └── GestureClassifier.js # Loop vs. ruin vs. river vs. tap ($1 + corner analysis), orbit rig
+│   ├── GestureClassifier.js # Loop vs. mountain vs. river vs. tap ($1 + corner analysis), gestures
+│   ├── CameraRig.js         # Dimensional Fold: 15° map -> 65° first person, walking
+│   └── Thumbstick.js        # Virtual stick + WASD
 ├── world/
-│   ├── BiomeConfig.js       # Mossy Ruin, Autumn Ridge, Moonlit Tide palettes
-│   └── SpriteInstancer.js   # Procedural cutout atlases, instanced billboards, flow particles
+│   ├── BiomeConfig.js       # Mossy Vale, Autumn Ridge, Moonlit Tide palettes
+│   ├── SpriteInstancer.js   # Procedural cutout atlases, instanced billboards, flow particles
+│   ├── WorldSeed.js         # Replayable stroke log <-> compact link code
+│   └── Exporter.js          # Bake to plain meshes and export .glb
 └── audio/
     └── PaperSynth.js        # Web Audio pen-scratch foley and terrace thuds
 ```
@@ -62,6 +105,25 @@ src/
   enclose area; sharp turns are counted on a resampled ring, and a $1 unistroke recognizer
   (start-point and direction invariant) settles borderline shapes. Everything else long enough
   is a river; short moves plant.
+- **Dimensional Fold.** One `fold` value runs the camera from a 15° near-orthographic map to a
+  65° first-person view. The field of view widens with it while, over the last part of the range,
+  the rig lowers onto a walker standing at the near edge of the page. Fog and the background haze
+  follow the camera so the horizon reads as a tabletop in a room.
+- **Ink edges.** The scene renders into a multisampled half-float target with a depth texture. A
+  full-screen pass inks silhouettes (Sobel on linear depth) and creases (depth Laplacian, which
+  ignores flat ground at grazing angles), heavier at ground level than from above.
+- **Projected cliff ink.** The page texture is painted from above, so steep terraces and mountain faces
+  get a side-projected (triplanar on X/Z) strata-and-hatching texture instead of a smear. This
+  covers what `three-projected-material` was suggested for without adding the dependency.
+- **World links.** Every committed stroke is logged with its points (simplified and quantized
+  before it is applied), its own random seed and any brush-size or planting choice (packed into
+  spare bits, so older links still decode), so replaying the log rebuilds the same world.
+  The log is packed to bytes, deflated and base32-encoded into `#w1…`, which is a plain hash and
+  works inside the claude.ai artifact viewer too.
+- **.glb export.** GPU-only effects are baked on the CPU: displaced terrain with water painted
+  into its texture, an optional water surface and rim, and crossed alpha-masked cards (or marker
+  nodes) for every sprite. Where the host only
+  allows common file types (the claude.ai viewer) the file is wrapped in a zip.
 - **Performance.** Pixel ratio capped at 2, one shadow-casting light, about 10 draw calls,
   no allocations in the frame loop, and texture uploads only on change.
   Add `?quality=low` to the URL for pixel ratio 1, no MSAA and a smaller shadow map.
@@ -69,17 +131,31 @@ src/
 ## Tests
 
 ```bash
-npm test           # unit tests: stroke geometry, $1 recognizer, classifier, rig, biomes, audio maths
+npm test           # unit tests: stroke geometry, $1 recognizer, classifier, camera rig (zoom chain,
+                   # pan, presets), thumbstick, world codec, zip writer, biomes, audio maths
 npm run test:e2e   # builds, serves dist/ and drives the app in headless Chromium
 ```
 
-The browser suite draws real loops, ruins, rivers, taps and flicks through pointer events, then
+The browser suite draws real loops, mountains, rivers, lakes, roads, sculpt strokes, taps and flicks through pointer events, then
 checks the composed height and mask data, sprite and particle counts, undo (including the 10-step
 limit and undoing Clear), biome switching, orbit and wheel zoom, touch pinch cancelling a stroke,
-the portrait phone layout, audio unlock, WebGL context loss and steady-state memory. Screenshots
+the portrait phone layout, audio unlock, WebGL context loss and steady-state memory, plus the
+English labels and help panel, folding to ground level, walking, looking and planting there,
+.glb export (parsed back), share links that rebuild an identical world, and autosave; and every
+tool, erase with undo and redo, brush sizes, planting choices, Random, Photo, the Options switches
+(applied live and remembered), the free camera (Move tool, panning, full orbit, tilt range, zoom
+chain, keys, presets), the phone layout of the rails and Options sheet, and the Export panel (map
+size and height scaling, detail, water and rim, real-size trees, markers, the maps zip). Screenshots
 go to `test-results/`. It uses the `playwright` package and needs a Chromium it can launch.
 
-## Not in this phase
+## Notes
 
-Phase 3 adds the pinch-to-ground-level camera with thumbstick walking, the screen-space Sobel
-ink-edge pass for first-person views, projected ink on cliffs, and `.glb` / URL-seed export.
+- Mountains replaced the earlier stone ruins. They use the same gesture and the same slot in
+  world links, so a link made with ruins now opens with mountains in their place.
+- Walking has no collision with sprites; you pass through paper cutouts.
+- Export gives a visual mesh, not physics: generate collision from the Terrain mesh (or the
+  heightmap) in your engine. The page texture is 1024², so on a 250 m map it is about 25 cm per
+  pixel; use the splat map with your own tiling materials for close-up play.
+- Calling `exportWorld()` with no options still gives the original 10-unit diorama with the rim.
+- World links store strokes, not pixels, so a link made by a future version with a different
+  brush may replay slightly differently. The format is versioned (`w1`).

@@ -2,7 +2,7 @@
 //
 //  albedoCanvas (1024²): warm parchment, watercolor washes and Sumi-ink lines. -> CanvasTexture
 //  heightMask   (512²):  composed from two working canvases into one RGBA DataTexture:
-//                          R = grass/moss mask, G = stone/ruin mask, B = water mask,
+//                          R = grass/moss mask, G = rock (mountain) mask, B = water mask,
 //                          A = elevation (0.5 = paper level, >0.5 hills, <0.5 riverbeds)
 //  flowCanvas   (256²):  river flow direction encoded as RG (0.5 = still) for the water shader.
 //
@@ -343,8 +343,11 @@ export class ParchmentCanvas {
 
   // ------------------------------------------------------------------ world strokes
 
-  /** Closed loop: raise a terraced hill. Loops inside hills stack (additive height). */
-  raiseHill(points, biome) {
+  /**
+   * Closed loop: raise a terraced hill. Loops inside hills stack (additive height).
+   * `scale` is the brush size: lower or taller terraces.
+   */
+  raiseHill(points, biome, scale = 1) {
     const ring = smoothPath(points, 2, true);
     // Simplex micro-variation along the rim so terraces look sculpted, not lathe-turned.
     const seed = this.rand() * 100;
@@ -352,7 +355,7 @@ export class ParchmentCanvas {
     sculpted.pop();
     const H = this.H;
     const hp = this._path(sculpted, H, true);
-    const step = 34; // ~0.13 of the 0..1 height range per terrace
+    const step = Math.round(34 * scale); // ~0.13 of the 0..1 height range per terrace at scale 1
     this._soft(this.height, hp, { color: `rgb(${step},${step},${step})`, blur: H * 0.028, op: 'lighter' });
     this._soft(this.mask, hp, { color: 'rgb(255,0,0)', blur: H * 0.01, op: 'lighter' });
 
@@ -402,127 +405,111 @@ export class ParchmentCanvas {
     return Math.abs(s * 0.5);
   }
 
-  /** Angular closed loop: crisp flat-topped plateau with an inked stone foundation. */
-  buildRuin(polygon, biome) {
+  /**
+   * Angular closed loop: a rocky mountain. Rings of the outline shrink toward a peak (each ring
+   * jittered so the slopes break into crags), ridges run from every corner to the summit, and
+   * the page gets rock wash, hachures down the slopes and a snow cap. `scale` = brush size.
+   */
+  raiseMountain(polygon, biome, scale = 1) {
     const H = this.H;
     const S = this.A;
-    const hp = this._path(polygon, H, true);
-    this._soft(this.height, hp, { color: 'rgb(30,30,30)', blur: H * 0.004, op: 'lighter' });
-    this._soft(this.mask, hp, { color: 'rgb(0,255,0)', blur: H * 0.004, op: 'lighter' });
-
-    const ap = this._path(polygon, S, true);
-    this._wash(ap, biome.ruinStone, 0.38, { edge: 0.55, edgeWidth: 2, layers: 2, granulate: 0.5 });
-
-    const a = this.albedo;
-    // Flagstone floor: an irregular grid clipped to the footprint.
-    a.save();
-    a.clip(ap);
-    a.strokeStyle = rgba(biome.ink, 0.28);
-    a.lineWidth = 1;
-    const cell = S * 0.022;
-    for (let y = 0; y < S; y += cell) {
-      a.beginPath();
-      a.moveTo(0, y + (this.rand() - 0.5) * 2);
-      a.lineTo(S, y + (this.rand() - 0.5) * 2);
-      a.stroke();
-      const shift = (Math.round(y / cell) % 2) * cell * 0.5;
-      for (let x = shift; x < S; x += cell * (1 + this.rand() * 0.6)) {
-        a.beginPath();
-        a.moveTo(x, y);
-        a.lineTo(x + (this.rand() - 0.5) * 2, y + cell);
-        a.stroke();
-      }
-    }
-    a.restore();
-
-    // Foundation wall blocks along every edge, with gaps where the stone has weathered away.
-    const blockLen = 0.026;
-    const thick = 0.013;
+    // Densify the outline and roughen it so the foot of the mountain is craggy, not straight.
+    const base = [];
     for (let i = 0; i < polygon.length; i++) {
       const p0 = polygon[i];
       const p1 = polygon[(i + 1) % polygon.length];
-      const dx = p1.x - p0.x;
-      const dy = p1.y - p0.y;
-      const len = Math.hypot(dx, dy);
-      if (len < 1e-4) continue;
-      const ux = dx / len;
-      const uy = dy / len;
-      const count = Math.max(1, Math.round(len / blockLen));
-      const bl = len / count;
-      for (let k = 0; k < count; k++) {
-        if (this.rand() < 0.16) continue; // weathered gap
-        const cx = p0.x + ux * (k + 0.5) * bl;
-        const cy = p0.y + uy * (k + 0.5) * bl;
-        this._block(cx, cy, ux, uy, bl * (0.86 + this.rand() * 0.1), thick * (0.8 + this.rand() * 0.4), biome);
-      }
-      // corner pillar
-      this._block(p0.x, p0.y, ux, uy, thick * 1.6, thick * 1.6, biome);
+      const steps = Math.max(2, Math.round(Math.hypot(p1.x - p0.x, p1.y - p0.y) / 0.012));
+      for (let k = 0; k < steps; k++) base.push({ x: p0.x + ((p1.x - p0.x) * k) / steps, y: p0.y + ((p1.y - p0.y) * k) / steps });
     }
-    // Moss dabs creeping over the stones.
+    let cx = 0;
+    let cy = 0;
+    for (const p of polygon) {
+      cx += p.x;
+      cy += p.y;
+    }
+    cx /= polygon.length;
+    cy /= polygon.length;
+    const seed = this.rand() * 100;
+    const ring = (s, rough) =>
+      base.map((p, i) => {
+        const t = i / base.length;
+        const n = this.noise2D(t * 11, seed + s * 7) * rough + this.noise2D(t * 29, seed + s * 13) * rough * 0.4;
+        const k = s * (1 + n);
+        return { x: cx + (p.x - cx) * k, y: cy + (p.y - cy) * k };
+      });
+
+    // Height: foothill pad, then stacked shrinking rings (additive) for a tall rocky peak.
+    const RINGS = 9;
+    const step = Math.max(6, Math.round(11 * scale));
+    this._soft(this.height, this._path(ring(1, 0.06), H, true), { color: 'rgb(16,16,16)', blur: H * 0.008, op: 'lighter' });
+    for (let i = 1; i <= RINGS; i++) {
+      const s = 1 - i / (RINGS + 0.8);
+      this._soft(this.height, this._path(ring(s, 0.14), H, true), { color: `rgb(${step},${step},${step})`, blur: H * 0.005, op: 'lighter' });
+    }
+    // Ridges from each corner up to the summit.
+    for (const p of polygon) {
+      const ridge = new Path2D();
+      ridge.moveTo(p.x * H, p.y * H);
+      ridge.lineTo((cx + (p.x - cx) * 0.45) * H, (cy + (p.y - cy) * 0.45) * H);
+      ridge.lineTo(cx * H, cy * H);
+      this._soft(this.height, ridge, { color: `rgb(${step},${step},${step})`, blur: H * 0.004, stroke: H * 0.01, op: 'lighter' });
+    }
+    this._soft(this.mask, this._path(ring(1, 0.06), H, true), { color: 'rgb(0,255,0)', blur: H * 0.004, op: 'lighter' });
+
+    // Page: rock wash, hachures down the slopes, ridge lines, snow cap and a craggy ink outline.
+    const foot = ring(1, 0.06);
+    this._wash(this._path(foot, S, true), biome.rock, 0.42, { edge: 0.55, edgeWidth: 2.5, layers: 3, granulate: 0.6 });
+    for (let i = 0; i < foot.length; i += 2) {
+      const p = foot[i];
+      const reach = 0.3 + this.rand() * 0.25;
+      this._ink(
+        [
+          { x: p.x, y: p.y },
+          { x: p.x + (cx - p.x) * reach, y: p.y + (cy - p.y) * reach },
+        ],
+        { color: biome.ink, width: 1, alpha: 0.32, bristle: false },
+      );
+    }
+    for (const p of polygon) {
+      this._ink(
+        [
+          { x: p.x, y: p.y },
+          { x: cx + (p.x - cx) * 0.45 + (this.rand() - 0.5) * 0.006, y: cy + (p.y - cy) * 0.45 + (this.rand() - 0.5) * 0.006 },
+          { x: cx, y: cy },
+        ],
+        { color: biome.ink, width: 1.8, alpha: 0.8 },
+      );
+    }
+    const cap = ring(0.34, 0.22);
+    const capPath = this._path(cap, S, true);
+    const a = this.albedo;
     a.save();
-    a.globalCompositeOperation = 'multiply';
-    for (let i = 0; i < polygon.length * 5; i++) {
-      const p = polygon[Math.floor(this.rand() * polygon.length)];
-      a.fillStyle = rgba(biome.ruinMoss, 0.25 + this.rand() * 0.25);
-      a.beginPath();
-      a.arc((p.x + (this.rand() - 0.5) * 0.05) * S, (p.y + (this.rand() - 0.5) * 0.05) * S, 2 + this.rand() * 5, 0, Math.PI * 2);
-      a.fill();
-    }
+    a.fillStyle = rgba(biome.snow, 0.92);
+    a.fill(capPath);
     a.restore();
+    this._ink([...cap, cap[0]], { color: biome.ink, width: 1.2, closed: true, alpha: 0.6 });
+    this._ink([...foot, foot[0]], { color: biome.ink, width: 2.6, closed: true });
     return { area: this._area(polygon) };
   }
 
-  _block(cx, cy, ux, uy, len, thick, biome) {
-    const a = this.albedo;
-    const S = this.A;
-    a.save();
-    a.translate(cx * S, cy * S);
-    a.rotate(Math.atan2(uy, ux) + (this.rand() - 0.5) * 0.12);
-    const w = len * S;
-    const h = thick * S;
-    a.fillStyle = biome.ruinStone;
-    a.strokeStyle = biome.ink;
-    a.lineWidth = 1.6;
-    a.lineJoin = 'round';
-    a.beginPath();
-    // slightly irregular quad
-    const j = () => (this.rand() - 0.5) * 1.6;
-    a.moveTo(-w / 2 + j(), -h / 2 + j());
-    a.lineTo(w / 2 + j(), -h / 2 + j());
-    a.lineTo(w / 2 + j(), h / 2 + j());
-    a.lineTo(-w / 2 + j(), h / 2 + j());
-    a.closePath();
-    a.fill();
-    a.stroke();
-    // shadow hatch on one side
-    a.strokeStyle = rgba(biome.ink, 0.45);
-    a.lineWidth = 0.8;
-    for (let x = -w / 2 + 2; x < w / 2; x += 3) {
-      a.beginPath();
-      a.moveTo(x, h / 2 - 1);
-      a.lineTo(x + 2, h / 2 - h * 0.45);
-      a.stroke();
-    }
-    a.restore();
-  }
-
-  /** Open stroke: carve a river channel, paint banks and record flow direction. */
-  carveRiver(points, biome) {
+  /** Open stroke: carve a river channel, paint banks and record flow direction. `scale` = width. */
+  carveRiver(points, biome, scale = 1) {
     const path = smoothPath(points, 2, false);
     const H = this.H;
     const S = this.A;
+    const w = scale;
     const hp = this._path(path, H, false);
     // Banks (0.40) then a deeper core (0.29). source-over carves through hills as a gorge.
-    this._soft(this.height, hp, { color: 'rgb(102,102,102)', blur: H * 0.012, stroke: H * 0.034 });
-    this._soft(this.height, hp, { color: 'rgb(74,74,74)', blur: H * 0.008, stroke: H * 0.016 });
-    this._soft(this.mask, hp, { color: 'rgb(0,0,255)', blur: H * 0.008, stroke: H * 0.03, op: 'lighter' });
+    this._soft(this.height, hp, { color: 'rgb(102,102,102)', blur: H * 0.012, stroke: H * 0.034 * w });
+    this._soft(this.height, hp, { color: 'rgb(74,74,74)', blur: H * 0.008, stroke: H * 0.016 * w });
+    this._soft(this.mask, hp, { color: 'rgb(0,0,255)', blur: H * 0.008, stroke: H * 0.03 * w, op: 'lighter' });
 
     // Flow direction (RG) along the path.
     const f = this.flow;
     const F = this.F;
     f.save();
     f.lineCap = 'round';
-    f.lineWidth = F * 0.05;
+    f.lineWidth = F * 0.05 * w;
     for (let i = 1; i < path.length; i++) {
       const p0 = path[i - 1];
       const p1 = path[i];
@@ -548,17 +535,17 @@ export class ParchmentCanvas {
     a.lineCap = 'round';
     a.lineJoin = 'round';
     a.strokeStyle = rgba(biome.bankWash, 0.3);
-    a.lineWidth = S * 0.06;
+    a.lineWidth = S * 0.06 * w;
     a.stroke(ap);
     a.strokeStyle = rgba(biome.waterInk, 0.42);
-    a.lineWidth = S * 0.032;
+    a.lineWidth = S * 0.032 * w;
     a.stroke(ap);
     a.strokeStyle = rgba(biome.waterDeep, 0.25);
-    a.lineWidth = S * 0.012;
+    a.lineWidth = S * 0.012 * w;
     a.stroke(ap);
     a.restore();
 
-    const half = (t) => 0.0165 * (0.85 + 0.3 * t);
+    const half = (t) => 0.0165 * w * (0.85 + 0.3 * t);
     this._ink(this._offset(path, half), { color: biome.ink, width: 2.1 });
     this._ink(this._offset(path, (t) => -half(t)), { color: biome.ink, width: 2.1 });
     // Little current marks.
@@ -572,6 +559,150 @@ export class ParchmentCanvas {
       });
     }
     return { path };
+  }
+
+  /**
+   * Eraser: rub the page back to bare paper along a stroke (or a dot for a tap): height to paper
+   * level, masks and flow cleared, and the clean parchment restored under a soft edge.
+   * `radius` is in page UV.
+   */
+  erase(points, radius = 0.05) {
+    const H = this.H;
+    const S = this.A;
+    const F = this.F;
+    const pts = points.length > 1 ? smoothPath(points, 2, false) : [points[0], { x: points[0].x + 1e-4, y: points[0].y }];
+    const hp = this._path(pts, H, false);
+    const width = radius * 2;
+    this._soft(this.height, hp, { color: `rgb(${HEIGHT_BASE},${HEIGHT_BASE},${HEIGHT_BASE})`, blur: H * 0.01, stroke: H * width });
+    this._soft(this.mask, hp, { color: '#000', blur: H * 0.006, stroke: H * width });
+    this._soft(this.flow, this._path(pts, F, false), { color: 'rgb(128,128,0)', blur: F * 0.006, stroke: F * width });
+    // Paper: a soft-edged brush shape on a scratch canvas, filled with the clean parchment.
+    if (!this._scratch) this._scratch = makeCanvas(S);
+    const { ctx: t } = this._scratch;
+    t.globalCompositeOperation = 'source-over';
+    t.clearRect(0, 0, S, S);
+    this._soft(t, this._path(pts, S, false), { color: '#000', blur: S * 0.012, stroke: S * width * 0.92 });
+    t.globalCompositeOperation = 'source-in';
+    t.drawImage(this.paperBase, 0, 0);
+    t.globalCompositeOperation = 'source-over';
+    this.albedo.drawImage(this._scratch.canvas, 0, 0);
+    return { path: pts };
+  }
+
+  /** Closed loop: a still lake. The basin sinks below the water table, with an inked shore. */
+  carveLake(points, biome, scale = 1) {
+    const ring = smoothPath(points, 2, true);
+    const H = this.H;
+    const S = this.A;
+    const hp = this._path(ring, H, true);
+    const depth = Math.round(Math.max(40, 74 - 18 * (scale - 1))); // lower = deeper
+    this._soft(this.height, hp, { color: 'rgb(104,104,104)', blur: H * 0.012 });
+    // A bowl: the deep fill is the shore shrunk toward its centre (whichever way it was drawn)
+    // and blurred wide, so the bed shelves down from the bank.
+    let cx = 0;
+    let cy = 0;
+    for (const p of ring) {
+      cx += p.x;
+      cy += p.y;
+    }
+    cx /= ring.length;
+    cy /= ring.length;
+    const inner = ring.map((p) => ({ x: cx + (p.x - cx) * 0.6, y: cy + (p.y - cy) * 0.6 }));
+    this._soft(this.height, this._path(inner, H, true), { color: `rgb(${depth},${depth},${depth})`, blur: H * 0.025 });
+    this._soft(this.mask, hp, { color: 'rgb(0,0,255)', blur: H * 0.006 });
+    this._soft(this.flow, this._path(ring, this.F, true), { color: 'rgb(128,128,0)', blur: 2 });
+    const ap = this._path(ring, S, true);
+    const a = this.albedo;
+    a.save();
+    a.globalCompositeOperation = 'multiply';
+    a.fillStyle = rgba(biome.bankWash, 0.32);
+    a.lineWidth = S * 0.02;
+    a.strokeStyle = rgba(biome.bankWash, 0.3);
+    a.stroke(ap);
+    a.fillStyle = rgba(biome.waterInk, 0.42);
+    a.fill(ap);
+    a.restore();
+    this._ink([...ring, ring[0]], { color: biome.ink, width: 2.2, closed: true });
+    // A few ripple marks.
+    for (let i = 0; i < 4; i++) {
+      const c = ring[Math.floor(this.rand() * ring.length)];
+      const t = 0.3 + this.rand() * 0.4;
+      const x = cx + (c.x - cx) * t;
+      const y = cy + (c.y - cy) * t;
+      this._ink(
+        [
+          { x: x - 0.012, y },
+          { x, y: y - 0.003 },
+          { x: x + 0.012, y },
+        ],
+        { color: biome.ink, width: 1, alpha: 0.4, bristle: false },
+      );
+    }
+    return { area: this._area(ring) };
+  }
+
+  /**
+   * Open stroke: a road. Each stretch is levelled across its width to the ground height at its
+   * centre (cut on the uphill side, fill on the downhill side), so it follows hills and bridges
+   * rivers as a causeway. Painted as a dirt track with dashed ink edges.
+   */
+  paveRoad(points, biome, scale = 1) {
+    const path = smoothPath(points, 3, false);
+    const H = this.H;
+    const S = this.A;
+    const width = 0.022 * scale;
+    // Sample centre heights first, so later stretches don't read already-levelled ground.
+    const hs = path.map((p) => {
+      const d = this.height.getImageData(Math.min(H - 1, Math.max(0, Math.floor(p.x * H))), Math.min(H - 1, Math.max(0, Math.floor(p.y * H))), 1, 1).data;
+      return Math.max(d[0], 112); // never below the water table: roads cross rivers on causeways
+    });
+    for (let i = 1; i < path.length; i++) {
+      const seg = new Path2D();
+      seg.moveTo(path[i - 1].x * H, path[i - 1].y * H);
+      seg.lineTo(path[i].x * H, path[i].y * H);
+      const h = Math.round((hs[i - 1] + hs[i]) / 2);
+      this._soft(this.height, seg, { color: `rgb(${h},${h},${h})`, blur: H * 0.004, stroke: H * width });
+      this._soft(this.mask, seg, { color: '#000', blur: H * 0.002, stroke: H * width * 0.9 });
+    }
+    const ap = this._path(path, S, false);
+    const a = this.albedo;
+    a.save();
+    a.lineCap = 'round';
+    a.lineJoin = 'round';
+    a.strokeStyle = rgba(biome.road, 0.85);
+    a.lineWidth = S * width * 0.95;
+    a.stroke(ap);
+    a.globalCompositeOperation = 'multiply';
+    a.strokeStyle = rgba(biome.road, 0.35);
+    a.lineWidth = S * width * 0.45;
+    a.setLineDash([S * 0.006, S * 0.01]);
+    a.stroke(ap);
+    a.restore();
+    const half = width * 0.5;
+    this._ink(this._offset(path, half), { color: biome.ink, width: 1.2, alpha: 0.7, bristle: false });
+    this._ink(this._offset(path, -half), { color: biome.ink, width: 1.2, alpha: 0.7, bristle: false });
+    return { path };
+  }
+
+  /**
+   * Sculpt along a stroke (or a dab for a tap): 'raise' and 'lower' nudge the ground up or down
+   * a little each pass, 'flatten' levels it to the height where the stroke started.
+   */
+  sculpt(points, mode, scale = 1) {
+    const H = this.H;
+    const pts = points.length > 1 ? smoothPath(points, 2, false) : [points[0], { x: points[0].x + 1e-4, y: points[0].y }];
+    const hp = this._path(pts, H, false);
+    const width = H * 0.05 * scale;
+    if (mode === 'flatten') {
+      const p = pts[0];
+      const d = this.height.getImageData(Math.min(H - 1, Math.max(0, Math.floor(p.x * H))), Math.min(H - 1, Math.max(0, Math.floor(p.y * H))), 1, 1).data;
+      this._soft(this.height, hp, { color: `rgb(${d[0]},${d[0]},${d[0]})`, blur: H * 0.012, stroke: width });
+    } else {
+      const amt = Math.round(9 * Math.sqrt(scale));
+      // 'difference' subtracts (|h - amt|), which is h - amt everywhere above the riverbeds.
+      this._soft(this.height, hp, { color: `rgb(${amt},${amt},${amt})`, blur: H * 0.016, stroke: width, op: mode === 'lower' ? 'difference' : 'lighter' });
+    }
+    return { path: pts };
   }
 
   /** Small ink grass tufts / ground marks under planted sprites. */
